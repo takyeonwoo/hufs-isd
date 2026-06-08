@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Check, BadgeCheck, Search, Upload, Send } from "lucide-react";
 import TopNav from "../components/TopNav.jsx";
+import { api } from "../lib/api.js";
 
 function Step({ n, label, state }) {
   // state: "done" | "active" | "todo"
@@ -40,6 +42,51 @@ const inputCls = "h-12 w-full rounded-xl border border-border-soft bg-surface-pr
 
 export default function Apply() {
   const navigate = useNavigate();
+  const [form, setForm] = useState({ cafe_name: "", address: "", phone: "", business_reg_no: "" });
+  const [file, setFile] = useState(null);
+  const [termsAgreed, setTermsAgreed] = useState(true);
+  const [marketing, setMarketing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const submit = async () => {
+    setError(null);
+    if (!form.cafe_name.trim() || !form.address.trim() || !form.business_reg_no.trim()) {
+      setError("필수 항목(카페 이름·주소·사업자등록번호)을 입력해주세요.");
+      return;
+    }
+    if (!termsAgreed) {
+      setError("입점 약관에 동의해주세요.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      // (27) 사업자등록증 업로드 → URL 확보
+      let business_license_url = "";
+      if (file) {
+        const up = await api.upload("/uploads/business-license", file);
+        business_license_url = up?.business_license_url ?? "";
+      }
+      // (21) 입점 신청 제출
+      await api.post("/applications", {
+        cafe_name: form.cafe_name.trim(),
+        address: form.address.trim(),
+        phone: form.phone.trim() || null,
+        business_reg_no: form.business_reg_no.trim(),
+        business_license_url,
+        terms_agreed_at: new Date().toISOString(),
+        marketing_agreed: marketing,
+      });
+      navigate("/apply/complete");
+    } catch (e) {
+      setError(e.message || "신청 제출에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen w-full justify-center bg-surface-secondary">
       <div className="flex w-full max-w-canvas flex-col bg-surface-secondary">
@@ -65,12 +112,12 @@ export default function Apply() {
             </div>
 
             <Field label="카페 이름" required>
-              <input className={inputCls} placeholder="운영 중인 카페 이름" />
+              <input className={inputCls} placeholder="운영 중인 카페 이름" value={form.cafe_name} onChange={set("cafe_name")} />
             </Field>
 
             <Field label="매장 주소" required>
               <div className="flex h-12 w-full items-center justify-between rounded-xl border border-border-soft bg-surface-primary px-4">
-                <input className="flex-1 bg-transparent font-body text-[13px] text-fg-primary outline-none placeholder:text-fg-muted" placeholder="서울특별시 마포구 ..." />
+                <input className="flex-1 bg-transparent font-body text-[13px] text-fg-primary outline-none placeholder:text-fg-muted" placeholder="서울특별시 마포구 ..." value={form.address} onChange={set("address")} />
                 <span className="flex h-8 items-center gap-1.5 rounded-full bg-surface-secondary px-3.5">
                   <Search size={12} className="text-fg-secondary" />
                   <span className="font-body text-xs font-bold text-fg-secondary">주소 검색</span>
@@ -79,42 +126,57 @@ export default function Apply() {
             </Field>
 
             <Field label="매장 연락처">
-              <input className={inputCls} placeholder="02-1234-5678" />
+              <input className={inputCls} placeholder="02-1234-5678" value={form.phone} onChange={set("phone")} />
             </Field>
 
             <Field label="사업자등록번호" required hint="등록번호 10자리를 입력해주세요">
-              <input className={inputCls + " font-data"} placeholder="000-00-00000" />
+              <input className={inputCls + " font-data"} placeholder="000-00-00000" value={form.business_reg_no} onChange={set("business_reg_no")} />
             </Field>
 
             <Field label="사업자등록증 사본" required>
-              <div className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-border-soft bg-surface-secondary p-6">
+              <label className="flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-border-soft bg-surface-secondary p-6">
                 <Upload size={28} className="text-accent" />
-                <span className="font-body text-[13px] font-bold text-fg-primary">파일을 끌어다 놓거나 클릭하여 업로드</span>
+                <span className="font-body text-[13px] font-bold text-fg-primary">
+                  {file ? file.name : "파일을 끌어다 놓거나 클릭하여 업로드"}
+                </span>
                 <span className="font-body text-[11px] font-medium text-fg-muted">PDF, JPG, PNG · 최대 10MB</span>
-              </div>
+                <input
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png"
+                  className="hidden"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
             </Field>
 
             <div className="flex flex-col gap-2.5 pt-2">
-              <div className="flex w-full items-center gap-2.5">
-                <span className="flex h-[18px] w-[18px] items-center justify-center rounded-md bg-accent">
-                  <Check size={12} className="text-fg-inverse" />
+              <button type="button" onClick={() => setTermsAgreed((v) => !v)} className="flex w-full items-center gap-2.5 text-left">
+                <span className={"flex h-[18px] w-[18px] items-center justify-center rounded-md " + (termsAgreed ? "bg-accent" : "border border-border-soft bg-surface-primary")}>
+                  {termsAgreed && <Check size={12} className="text-fg-inverse" />}
                 </span>
                 <span className="font-body text-xs font-semibold text-fg-primary">입점 약관 및 개인정보 처리방침에 동의합니다</span>
                 <span className="font-body text-[11px] font-bold text-accent">(필수)</span>
-              </div>
-              <div className="flex w-full items-center gap-2.5">
-                <span className="h-[18px] w-[18px] rounded-md border border-border-soft bg-surface-primary" />
+              </button>
+              <button type="button" onClick={() => setMarketing((v) => !v)} className="flex w-full items-center gap-2.5 text-left">
+                <span className={"flex h-[18px] w-[18px] items-center justify-center rounded-md " + (marketing ? "bg-accent" : "border border-border-soft bg-surface-primary")}>
+                  {marketing && <Check size={12} className="text-fg-inverse" />}
+                </span>
                 <span className="font-body text-xs font-medium text-fg-secondary">매장 트렌드 분석 결과 이메일 수신에 동의합니다</span>
                 <span className="font-body text-[11px] font-semibold text-fg-muted">(선택)</span>
-              </div>
+              </button>
             </div>
 
+            {error && (
+              <div className="rounded-xl bg-[#FEE7E7] px-4 py-3 font-body text-[13px] font-semibold text-[#C0392B]">{error}</div>
+            )}
+
             <button
-              onClick={() => navigate("/apply/complete")}
-              className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-accent"
+              onClick={submit}
+              disabled={submitting}
+              className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-accent disabled:opacity-60"
             >
               <Send size={16} className="text-fg-inverse" />
-              <span className="font-body text-sm font-bold text-fg-inverse">입점 신청 제출하기</span>
+              <span className="font-body text-sm font-bold text-fg-inverse">{submitting ? "제출 중…" : "입점 신청 제출하기"}</span>
             </button>
 
             <div className="flex w-full items-center justify-center gap-1.5">

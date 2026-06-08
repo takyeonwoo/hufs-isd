@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Flame, ShieldCheck } from "lucide-react";
+import { supabase } from "../lib/supabase.js";
 
 const stats = [
   { label: "등록 매장", value: "312", accent: false },
@@ -8,12 +10,28 @@ const stats = [
 ];
 
 const socials = [
-  { label: "Google로 로그인", bg: "#FFFFFF", color: "#1A1A1A", border: true, badge: <span className="font-heading text-lg font-bold text-[#4285F4]">G</span> },
-  { label: "Kakao로 로그인", bg: "#FEE500", color: "#1A1A1A", badge: <span className="text-base">💬</span> },
-  { label: "Naver로 로그인", bg: "#03C75A", color: "#FFFFFF", badge: <span className="font-heading text-sm font-bold text-fg-inverse">N</span> },
+  { provider: "google", label: "Google로 로그인", bg: "#FFFFFF", color: "#1A1A1A", border: true, badge: <span className="font-heading text-lg font-bold text-[#4285F4]">G</span> },
+  { provider: "kakao", label: "Kakao로 로그인", bg: "#FEE500", color: "#1A1A1A", badge: <span className="text-base">💬</span> },
+  { provider: "naver", label: "Naver로 로그인", bg: "#03C75A", color: "#FFFFFF", badge: <span className="font-heading text-sm font-bold text-fg-inverse">N</span> },
 ];
 
 export default function Login() {
+  const [error, setError] = useState(null);
+
+  // 소셜 로그인 → Supabase OAuth (성공 시 세션 발급)
+  async function handleSocial(provider) {
+    setError(null);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: `${window.location.origin}/apply` },
+      });
+      if (error) throw error;
+    } catch (e) {
+      setError(`${provider} 로그인을 사용할 수 없습니다: ${e.message}`);
+    }
+  }
+
   return (
     <div className="flex min-h-screen w-full justify-center bg-surface-primary">
       <div className="flex w-full max-w-canvas">
@@ -64,6 +82,7 @@ export default function Login() {
             {socials.map((s) => (
               <button
                 key={s.label}
+                onClick={() => handleSocial(s.provider)}
                 className="flex h-14 w-full items-center justify-center gap-2.5 rounded-full"
                 style={{ backgroundColor: s.bg, color: s.color, border: s.border ? "1px solid #EDEEF1" : "none" }}
               >
@@ -71,6 +90,8 @@ export default function Login() {
                 <span className="font-body text-sm font-bold" style={{ color: s.color }}>{s.label}</span>
               </button>
             ))}
+
+            {error && <p className="font-body text-[12px] font-semibold text-[#C0392B]">{error}</p>}
 
             <div className="flex items-center gap-3 py-3">
               <span className="h-px flex-1 bg-border-soft" />
