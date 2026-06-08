@@ -1,6 +1,19 @@
-node_modules/
-dist/
+# --- 공통 ---
 *.log
 .DS_Store
 .env
 .env.local
+
+# --- 프론트엔드 (Node) ---
+node_modules/
+dist/
+.vite/
+
+# --- 백엔드 (Python) ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
