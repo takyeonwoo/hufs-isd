@@ -1,7 +1,7 @@
 # Foorendy — REST API 명세서
 
 > Food + Trendy · ISD 2026 팀 프로젝트
-> Backend: **FastAPI · PostgreSQL(Supabase) · Redis · APScheduler**
+> Backend: **FastAPI · PostgreSQL(Supabase)** · (Redis·APScheduler: 선택/배치, 현재 미사용)
 > 본 문서는 [schema.sql](schema.sql)의 9개 테이블과 화면 플로우(Home / Map / Dashboard / Apply / Admin)를 기준으로 작성되었습니다.
 
 ---
@@ -73,9 +73,9 @@ Authorization: Bearer <access_token>
 | # | Method | Path | 권한 | 설명 |
 |---|--------|------|------|------|
 | **Auth** ||||
-| 1 | POST | `/auth/callback` | 🔓 | 소셜 로그인 콜백(세션 교환) |
+| 1 | ~~POST~~ | `/auth/callback` | 🔓 | 소셜 로그인 콜백 — **Supabase 클라이언트 처리**(`supabase.auth.signInWithOAuth`), 백엔드 엔드포인트 불필요 |
 | 2 | GET | `/auth/me` | 🔑/🛡 | 내 프로필 조회 |
-| 3 | POST | `/auth/logout` | 🔑/🛡 | 로그아웃 |
+| 3 | ~~POST~~ | `/auth/logout` | 🔑/🛡 | 로그아웃 — **Supabase 클라이언트 처리**(`supabase.auth.signOut`), 백엔드 엔드포인트 불필요 |
 | 34 | DELETE | `/auth/me` | 🔑 | 회원 탈퇴(본인 매장+계정 삭제) (신규) |
 | **Trends** ||||
 | 4 | GET | `/trends` | 🔓 | 트렌드 랭킹 TOP N |
@@ -119,27 +119,11 @@ Authorization: Bearer <access_token>
 
 ## 3. Auth
 
-### 1) POST `/auth/callback` 🔓
-소셜 로그인(Google/Kakao/Naver) 후 인가 코드를 세션으로 교환.
-
-**Request**
-```json
-{ "provider": "google", "code": "<oauth_code>", "role": "owner" }
-```
-- `provider`: `google` | `kakao` | `naver`
-- `role`: `owner` | `admin`
-
-**Response 200**
-```json
-{
-  "data": {
-    "access_token": "eyJhbGci...",
-    "refresh_token": "...",
-    "expires_in": 3600,
-    "user": { "id": "uuid", "email": "kim@yeonnam.cafe", "role": "owner" }
-  }
-}
-```
+### 1) POST `/auth/callback` 🔓 — *Supabase 클라이언트 처리 (백엔드 불필요)*
+SPA에서는 `supabase.auth.signInWithOAuth({ provider })`가 OAuth 리다이렉트·세션 발급을 **클라이언트에서 직접** 처리한다. 별도 백엔드 콜백 엔드포인트는 호출하지 않는다.
+> 서버사이드 코드 교환 방식으로 전환할 경우의 참고 형태:
+> - Request: `{ "provider": "google"|"kakao"|"naver", "code": "<oauth_code>", "role": "owner"|"admin" }`
+> - Response: `{ "data": { "access_token", "refresh_token", "expires_in", "user": { "id", "email", "role" } } }`
 
 ### 2) GET `/auth/me` 🔑/🛡
 **Response 200**
@@ -147,7 +131,9 @@ Authorization: Bearer <access_token>
 { "data": { "id": "uuid", "email": "kim@yeonnam.cafe", "role": "owner", "created_at": "2026-06-01T09:00:00Z" } }
 ```
 
-### 3) POST `/auth/logout` 🔑/🛡 → `204 No Content`
+### 3) POST `/auth/logout` 🔑/🛡 — *Supabase 클라이언트 처리 (백엔드 불필요)*
+`supabase.auth.signOut()`으로 클라이언트 세션을 종료한다. 백엔드 엔드포인트는 호출하지 않는다.
+> 로그아웃("세션 종료")은 클라이언트로 가능하지만, **회원 탈퇴("계정 영구삭제")는 service-role 권한이 필요해 백엔드 전용** → 아래 34) `DELETE /auth/me` 참고.
 
 ### 34) DELETE `/auth/me` 🔑 (신규)
 회원 탈퇴. UI.pen "10 회원 탈퇴" 플로우. 본인 소유 매장과 계정을 모두 삭제한다.
@@ -192,18 +178,21 @@ Authorization: Bearer <access_token>
 **Response 200**: 위 단일 객체 + 판매 매장 수 등.
 
 ### 6) GET `/trends/search-ranking` 🔓
-Hero 영역 "실시간 인기 검색어" (Redis 집계, 5초 간격).
+Hero 영역 "실시간 인기 검색어". 손님의 `SEARCH_TREND` 이벤트(`analytics_logs`)를 최근 `window_hours`(기본 24h) 동안 trend별로 집계해 상위 N개를 반환하고, 직전 동일 길이 윈도우와 비교해 순위 변동을 계산한다. **DB 집계 방식**(Redis 불필요 — 트래픽 증가 시 Redis ZSET 캐싱으로 최적화 가능).
+
+**Query**: `limit`(기본 5, 최대 20), `window_hours`(기본 24, 최대 168)
 
 **Response 200**
 ```json
 {
   "data": [
-    { "rank": 1, "name": "우베", "previous_rank": 2, "delta": 1, "direction": "up" },
-    { "rank": 2, "name": "두바이초콜릿", "previous_rank": 1, "delta": -1, "direction": "down" }
+    { "rank": 1, "trend_id": 1, "name": "우베", "emoji": "🟣", "count": 142, "delta": 1, "direction": "up" },
+    { "rank": 2, "trend_id": 2, "name": "두바이초콜릿", "emoji": "🍫", "count": 98, "delta": 1, "direction": "down" }
   ],
-  "meta": { "refreshed_at": "2026-05-26T14:00:00Z" }
+  "meta": { "refreshed_at": "2026-05-26T14:00:00Z", "window_hours": 24 }
 }
 ```
+> `delta`는 순위 변동 크기(0 이상), `direction`은 `up`/`down`. 직전 윈도우에 없던 신규 항목은 `direction: "up"`, `delta: 0`.
 
 ---
 
@@ -631,5 +620,6 @@ Admin KPI 카드.
 - **재고 상태 자동화**: 수량 변경(`PATCH /products/{id}/quantity`) 시 `inventory_logs` 기록 + `stock_status`·`stock_updated_at` 자동 갱신.
 - **승인 트랜잭션**: 입점 승인 시 `store_applications.status` 변경과 `stores` 생성은 단일 트랜잭션으로 처리.
 - **익명 로그**: `analytics_logs`는 개인정보를 담지 않으며 `visitor_id`는 클라이언트 생성 익명 식별자.
-- **인기 검색어/랭킹**: Redis 집계 + APScheduler 배치(매시간 트렌드 점수 갱신).
+- **인기 검색어**: `analytics_logs`의 `SEARCH_TREND` 이벤트를 DB 집계(`GET /trends/search-ranking`). Redis 불필요(추후 캐싱 최적화 옵션). 트렌드 점수 정기 갱신은 APScheduler 배치(계획).
+- **로그아웃 vs 회원 탈퇴**: 로그아웃은 클라이언트 `supabase.auth.signOut()`(백엔드 불필요), 회원 탈퇴는 service-role admin 삭제가 필요해 백엔드 `DELETE /auth/me` 전용. 소셜 로그인 콜백도 Supabase 클라이언트가 처리.
 - **버전 관리**: URL 경로 버전(`/v1`). 하위 호환 깨지는 변경은 `/v2`로 분리.
