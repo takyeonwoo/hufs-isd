@@ -32,6 +32,11 @@ class CurrentUser:
     role: Role
 
 
+# DEV_FAKE_AUTH 용 가짜 유저 id (UUID 형식이어야 stores.owner_id 등 UUID 컬럼 쿼리에서 안 깨짐)
+DEV_OWNER_ID = "00000000-0000-0000-0000-0000000000a1"
+DEV_ADMIN_ID = "00000000-0000-0000-0000-0000000000b2"
+
+
 def _decode(token: str) -> dict:
     if not jwt or not settings.supabase_jwt_secret:
         raise unauthorized("JWT 검증 설정이 없습니다.")
@@ -51,7 +56,8 @@ async def get_current_user(
 ) -> CurrentUser:
     if creds is None:
         if settings.dev_fake_auth:
-            return CurrentUser(id="dev-owner-uuid", email="dev@foorendy.local", role="owner")
+            # owner_id 컬럼이 UUID 타입이므로 유효한 UUID 형식이어야 한다.
+            return CurrentUser(id=DEV_OWNER_ID, email="dev@foorendy.local", role="owner")
         raise unauthorized()
 
     claims = _decode(creds.credentials)
@@ -70,6 +76,6 @@ async def require_owner(user: CurrentUser = Depends(get_current_user)) -> Curren
 async def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
     if user.role != "admin":
         if settings.dev_fake_auth:
-            return CurrentUser(id="dev-admin-uuid", email="admin@foorendy.local", role="admin")
+            return CurrentUser(id=DEV_ADMIN_ID, email="admin@foorendy.local", role="admin")
         raise forbidden("심사자 권한이 필요합니다.")
     return user

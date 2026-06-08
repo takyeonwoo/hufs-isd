@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Query
 
 from app.core.responses import not_found, ok
+from app.core.supabase import get_service_client
 from app.schemas.common import TrendStatus
 
 router = APIRouter(prefix="/trends", tags=["trends"])
@@ -15,9 +16,15 @@ async def list_trends(
     status: TrendStatus | None = None,
 ):
     """트렌드 랭킹 TOP N. (4)"""
-    # TODO: trends 테이블에서 rank 순 조회, store_count 파생 계산
     now = datetime.now(timezone.utc).isoformat()
-    return ok([], meta={"updated_at": now})
+    db = get_service_client()
+    if db is None:
+        return ok([], meta={"updated_at": now})
+    query = db.table("trends").select("*").order("rank").limit(limit)
+    if status is not None:
+        query = query.eq("status", status.value)
+    res = query.execute()
+    return ok(res.data or [], meta={"updated_at": now})
 
 
 @router.get("/search-ranking")

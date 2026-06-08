@@ -8,11 +8,23 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, status
 
 from app.core.deps import CurrentUser, require_owner
-from app.core.responses import not_found, ok
+from app.core.responses import ApiError, not_found, ok
+from app.core.supabase import get_service_client
 from app.schemas.common import StockStatus
 from app.schemas.products import ProductCreateIn, ProductUpdateIn, QuantityUpdateIn
 
 router = APIRouter(tags=["products"])
+
+
+def _db():
+    client = get_service_client()
+    if client is None:
+        raise ApiError(
+            "SUPABASE_NOT_CONFIGURED",
+            "서버 Supabase service key 가 설정되지 않았습니다. (.env SUPABASE_SERVICE_KEY)",
+            status_code=500,
+        )
+    return client
 
 
 def stock_status_for(quantity: int) -> StockStatus:
@@ -26,21 +38,34 @@ def stock_status_for(quantity: int) -> StockStatus:
 @router.get("/stores/{store_id}/products")
 async def list_products(store_id: int, q: str | None = None, stock_status: str | None = None):
     """매장 상품 목록. (11)"""
-    # TODO: products + trend 조인, q/stock_status 필터
-    return ok([])
+    db = get_service_client()
+    if db is None:
+        return ok([])
+    query = db.table("products").select("*").eq("store_id", store_id).order("created_at", desc=True)
+    if q:
+        query = query.ilike("name", f"%{q}%")
+    if stock_status:
+        query = query.eq("stock_status", stock_status)
+    res = query.execute()
+    return ok(res.data or [])
 
 
 @router.post("/stores/{store_id}/products", status_code=status.HTTP_201_CREATED)
 async def create_product(store_id: int, body: ProductCreateIn, user: CurrentUser = Depends(require_owner)):
-    """상품 등록. (12)"""
-    # TODO: 소유권 확인 후 insert. stock_status 는 quantity 기준 자동 계산
-    return ok(
-        {
-            "store_id": store_id,
-            "stock_status": stock_status_for(body.quantity).value,
-            **body.model_dump(),
-        }
-    )
+    """상품 등록. stock_status 는 quantity 기준 자동 계산. (12)"""
+    db = _db()
+    payload = {
+        "store_id": store_id,
+        "trend_id": body.trend_id,
+        "name": body.name,
+        "price": body.price,
+        "quantity": body.quantity,
+        "stock_status": stock_status_for(body.quantity).value,
+        "image_url": body.image_url,
+        "stock_updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    res = db.table("products").insert(payload).execute()
+    return ok(res.data[0])
 
 
 @router.patch("/products/{product_id}")

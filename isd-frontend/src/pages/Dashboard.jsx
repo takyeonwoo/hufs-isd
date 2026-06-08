@@ -1,8 +1,15 @@
+import { useState, useEffect, useRef } from "react";
 import {
   ChevronDown, Eye, Search, Package, TrendingUp, ArrowUp, Flame, Plus, Minus,
-  Trash2, Calendar, MousePointerClick,
+  Trash2, Calendar, MousePointerClick, UserX, ImagePlus,
 } from "lucide-react";
 import TopNav from "../components/TopNav.jsx";
+import DeleteStoreModal from "../components/DeleteStoreModal.jsx";
+import WithdrawModal from "../components/WithdrawModal.jsx";
+import { api } from "../lib/api.js";
+
+// TODO: 로그인 + GET /stores/me 연결되면 실제 매장 id 로 교체.
+const CURRENT_STORE_ID = 1;
 
 /* ---------- KPI ---------- */
 const kpis = [
@@ -49,6 +56,7 @@ function KpiCard({ title, icon: Icon, value, unit, sub, pill, dark }) {
 const AVAIL = { label: "판매중", color: "#22A06B", bg: "#E6F6EF" };
 const LOW = { label: "품절임박", color: "#F5A524", bg: "#FFF3D8" };
 const OUT = { label: "품절", color: "#888888", bg: "#F7F8FA" };
+const PILL_BY_STATUS = { AVAILABLE: AVAIL, LOW, SOLD_OUT: OUT };
 
 const rows = [
   { name: "우베 케이크", thumb: "#F3D9FF", price: "6,800", trend: "🟣 우베", qty: 8, status: AVAIL },
@@ -76,7 +84,125 @@ function StatusPill({ status }) {
   );
 }
 
-function InventoryCard() {
+function AddProductRow({ storeId, trends, onCreated }) {
+  const fileRef = useRef(null);
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [qty, setQty] = useState(0);
+  const [trendId, setTrendId] = useState("");
+  const [imageUrl, setImageUrl] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const pickImage = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { image_url } = await api.upload("/uploads/product-image", file);
+      setImageUrl(image_url);
+    } catch (err) {
+      alert(`이미지 업로드 실패: ${err.message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const submit = async () => {
+    if (!name.trim()) return alert("메뉴명을 입력하세요.");
+    if (!trendId) return alert("트렌드를 선택하세요.");
+    setSaving(true);
+    try {
+      const product = await api.post(`/stores/${storeId}/products`, {
+        trend_id: Number(trendId),
+        name: name.trim(),
+        price: price ? Number(price) : null,
+        quantity: Number(qty) || 0,
+        image_url: imageUrl,
+      });
+      onCreated?.(product);
+      setName(""); setPrice(""); setQty(0); setTrendId(""); setImageUrl(null);
+      if (fileRef.current) fileRef.current.value = "";
+    } catch (err) {
+      alert(`메뉴 등록 실패: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center rounded-lg border border-accent bg-accent-soft px-5 py-3.5">
+      <div className="flex w-[220px] items-center gap-2.5">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={pickImage}
+          className="hidden"
+        />
+        <button
+          onClick={() => fileRef.current?.click()}
+          title="메뉴 사진 업로드"
+          className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-accent bg-surface-primary"
+        >
+          {imageUrl ? (
+            <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+          ) : uploading ? (
+            <span className="font-data text-[9px] text-accent">…</span>
+          ) : (
+            <ImagePlus size={14} className="text-accent" />
+          )}
+        </button>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="메뉴명 입력"
+          className="w-[150px] bg-transparent font-body text-[13px] font-bold text-fg-primary outline-none placeholder:font-normal placeholder:text-accent"
+        />
+      </div>
+      <input
+        value={price}
+        onChange={(e) => setPrice(e.target.value.replace(/[^0-9]/g, ""))}
+        placeholder="가격"
+        className="w-20 bg-transparent font-data text-[13px] text-fg-primary outline-none placeholder:text-fg-muted"
+      />
+      <div className="w-[140px]">
+        <select
+          value={trendId}
+          onChange={(e) => setTrendId(e.target.value)}
+          className="rounded-full border border-border-soft bg-surface-primary px-2.5 py-1 font-body text-[11px] text-fg-primary outline-none"
+        >
+          <option value="">트렌드 선택</option>
+          {trends.map((t) => (
+            <option key={t.trend_id} value={t.trend_id}>{t.name}</option>
+          ))}
+        </select>
+      </div>
+      <div className="w-[150px]">
+        <span className="inline-flex h-8 items-center gap-1 rounded-full bg-surface-primary px-1">
+          <button onClick={() => setQty((q) => Math.max(0, q - 1))} className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-secondary"><Minus size={12} className="text-fg-secondary" /></button>
+          <span className="w-7 text-center font-data text-xs font-bold text-fg-primary">{qty}</span>
+          <button onClick={() => setQty((q) => q + 1)} className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-secondary"><Plus size={12} className="text-fg-secondary" /></button>
+        </span>
+      </div>
+      <div className="w-[110px]">
+        <span className="inline-flex items-center rounded-full border border-border-soft bg-surface-primary px-3 py-[5px] font-body text-[11px] text-fg-muted">자동</span>
+      </div>
+      <div className="flex flex-1 justify-end">
+        <button
+          onClick={submit}
+          disabled={saving || uploading}
+          className="flex h-8 items-center justify-center rounded-full bg-accent px-3.5 font-body text-[11px] font-bold text-fg-inverse disabled:opacity-50"
+        >
+          {saving ? "등록 중…" : "추가"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function InventoryCard({ storeId, trends }) {
+  const [added, setAdded] = useState([]);
   return (
     <div className="flex flex-col gap-[18px] rounded-2xl bg-surface-primary p-7">
       <div className="flex w-full items-center justify-between">
@@ -122,23 +248,32 @@ function InventoryCard() {
             </div>
           </div>
         ))}
-        <div className="flex items-center rounded-lg border border-accent bg-accent-soft px-5 py-3.5">
-          <div className="flex w-[220px] items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-accent bg-surface-primary"><Plus size={14} className="text-accent" /></span>
-            <span className="font-body text-[13px] font-bold text-accent">메뉴명 입력</span>
+        {added.map((r) => (
+          <div key={r.product_id} className="flex items-center bg-surface-primary px-5 py-3.5">
+            <div className="flex w-[220px] items-center gap-2.5">
+              <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-surface-secondary">
+                {r.image_url && <img src={r.image_url} alt="" className="h-full w-full object-cover" />}
+              </span>
+              <span className="font-body text-[13px] font-bold text-fg-primary">{r.name}</span>
+            </div>
+            <span className="w-20 font-data text-[13px] font-semibold text-fg-primary">{r.price?.toLocaleString() ?? "-"}</span>
+            <div className="w-[140px]">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 font-body text-[11px] font-semibold text-accent">
+                {trends.find((t) => t.trend_id === r.trend_id)?.name ?? "트렌드"}
+              </span>
+            </div>
+            <div className="w-[150px]"><QtyBox qty={r.quantity} /></div>
+            <div className="w-[110px]"><StatusPill status={PILL_BY_STATUS[r.stock_status] ?? OUT} /></div>
+            <div className="flex flex-1 justify-end">
+              <button className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><Trash2 size={14} className="text-fg-muted" /></button>
+            </div>
           </div>
-          <span className="w-20 font-data text-[13px] text-fg-muted">가격</span>
-          <div className="w-[140px]">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border-soft bg-surface-primary px-2.5 py-1 font-body text-[11px] text-fg-muted">트렌드 선택</span>
-          </div>
-          <div className="w-[150px]"><QtyBox qty={0} /></div>
-          <div className="w-[110px]">
-            <span className="inline-flex items-center rounded-full border border-border-soft bg-surface-primary px-3 py-[5px] font-body text-[11px] text-fg-muted">상태</span>
-          </div>
-          <div className="flex flex-1 justify-end">
-            <button className="flex h-8 items-center justify-center rounded-full bg-accent px-3.5 font-body text-[11px] font-bold text-fg-inverse">추가</button>
-          </div>
-        </div>
+        ))}
+        <AddProductRow
+          storeId={storeId}
+          trends={trends}
+          onCreated={(p) => setAdded((a) => [...a, p])}
+        />
       </div>
 
       <div className="flex flex-col gap-3 rounded-xl bg-surface-secondary p-[18px]">
@@ -312,7 +447,47 @@ function EventCard() {
   );
 }
 
+/* ---------- Account footer ---------- */
+function AccountFooter({ onDeleteStore, onWithdraw }) {
+  return (
+    <div className="flex items-center justify-between rounded-2xl bg-surface-primary px-7 py-5">
+      <div className="flex flex-col gap-1">
+        <span className="font-body text-sm font-bold text-fg-primary">계정 관리</span>
+        <span className="font-body text-xs text-fg-muted">
+          더 이상 Foorendy를 사용하지 않으신다면 매장을 삭제하거나 계정을 탈퇴할 수 있어요.
+        </span>
+      </div>
+      <div className="flex items-center gap-2.5">
+        <button
+          onClick={onDeleteStore}
+          className="flex h-10 items-center gap-1.5 rounded-full border border-[#E5484D] bg-surface-primary px-4 font-body text-[13px] font-bold text-[#E5484D]"
+        >
+          <Trash2 size={14} className="text-[#E5484D]" />
+          매장 삭제
+        </button>
+        <button
+          onClick={onWithdraw}
+          className="flex h-10 items-center gap-1.5 rounded-full border border-[#E5484D] bg-surface-primary px-4 font-body text-[13px] font-bold text-[#E5484D]"
+        >
+          <UserX size={14} className="text-[#E5484D]" />
+          회원 탈퇴
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [trends, setTrends] = useState([]);
+
+  useEffect(() => {
+    api.get("/trends?limit=100")
+      .then((data) => setTrends(data || []))
+      .catch(() => setTrends([]));
+  }, []);
+
   return (
     <div className="flex min-h-screen w-full justify-center bg-surface-secondary">
       <div className="w-full max-w-canvas bg-surface-secondary">
@@ -339,7 +514,7 @@ export default function Dashboard() {
           {/* body */}
           <div className="flex gap-5">
             <div className="flex flex-1 flex-col gap-5">
-              <InventoryCard />
+              <InventoryCard storeId={CURRENT_STORE_ID} trends={trends} />
               <NoticeCard />
             </div>
             <div className="flex w-[480px] flex-col gap-5">
@@ -348,8 +523,39 @@ export default function Dashboard() {
               <EventCard />
             </div>
           </div>
+
+          {/* account management */}
+          <AccountFooter
+            onDeleteStore={() => setDeleteOpen(true)}
+            onWithdraw={() => setWithdrawOpen(true)}
+          />
         </main>
       </div>
+
+      <DeleteStoreModal
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={async () => {
+          try {
+            await api.del(`/stores/${CURRENT_STORE_ID}`);
+            alert("매장이 삭제되었습니다.");
+          } catch (e) {
+            alert(`매장 삭제 실패: ${e.message}`);
+          }
+        }}
+      />
+      <WithdrawModal
+        open={withdrawOpen}
+        onClose={() => setWithdrawOpen(false)}
+        onConfirm={async () => {
+          try {
+            await api.del("/auth/me");
+            alert("탈퇴가 완료되었습니다.");
+          } catch (e) {
+            alert(`회원 탈퇴 실패: ${e.message}`);
+          }
+        }}
+      />
     </div>
   );
 }
