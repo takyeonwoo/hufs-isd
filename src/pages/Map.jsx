@@ -1,6 +1,8 @@
+import { useEffect, useRef } from "react";
 import { MapPin, ChevronDown, List, Map as MapIcon, Info, Plus, Minus, LocateFixed, Timer, X } from "lucide-react";
 import TopNav from "../components/TopNav.jsx";
 import StoreCard from "../components/StoreCard.jsx";
+import { loadNaverMaps } from "../lib/naverMap.js";
 
 const trendChips = ["두바이초콜릿", "두쫀쿠", "버터떡", "크루키", "바스크치즈", "말차푸딩", "밤티라미수", "약과쿠키", "흑임자라떼"];
 
@@ -21,14 +23,28 @@ const list = [
   { emoji: "🍮", name: "이대 우베 푸딩샵", desc: "우베 푸딩 · 4,500원 · 잔여 11", distance: "1.5 km", time: "방금 업데이트" },
 ];
 
+// 홍대입구역 일대 (시연용 좌표)
+const MY_LOCATION = { lat: 37.5571, lng: 126.9245 };
+
 const markers = [
-  { x: 380, y: 380, emoji: "🟣", label: "우베 6.8k", bg: "#7C3AED" },
-  { x: 660, y: 340, emoji: "🟣", label: "우베 5.5k", bg: "#7C3AED" },
-  { x: 240, y: 600, emoji: null, label: "품절", bg: "#9CA3AF" },
-  { x: 760, y: 640, emoji: "🥐", label: "품절임박 4.2k", bg: "#F5A524" },
-  { x: 160, y: 240, emoji: "🍮", label: "우베 4.5k", bg: "#7C3AED" },
-  { x: 540, y: 760, emoji: "🟣", label: "우베 7.2k", bg: "#7C3AED" },
+  { lat: 37.5605, lng: 126.923, emoji: "🟣", label: "우베 6.8k", bg: "#7C3AED" },
+  { lat: 37.5588, lng: 126.929, emoji: "🟣", label: "우베 5.5k", bg: "#7C3AED" },
+  { lat: 37.5495, lng: 126.914, emoji: null, label: "품절", bg: "#9CA3AF" },
+  { lat: 37.556, lng: 126.905, emoji: "🥐", label: "품절임박 4.2k", bg: "#F5A524" },
+  { lat: 37.563, lng: 126.918, emoji: "🍮", label: "우베 4.5k", bg: "#7C3AED" },
+  { lat: 37.552, lng: 126.927, emoji: "🟣", label: "우베 7.2k", bg: "#7C3AED" },
 ];
+
+// 기존 마커 디자인을 그대로 HTML 문자열로 (네이버 마커 icon.content 용)
+function markerHtml({ emoji, label, bg }) {
+  return `
+    <div style="display:flex;height:36px;align-items:center;gap:6px;border-radius:9999px;
+      border:3px solid #fff;padding:0 12px;background:${bg};
+      box-shadow:0 3px 8px rgba(0,0,0,0.2);white-space:nowrap;transform:translate(-50%,-50%);">
+      ${emoji ? `<span style="font-size:14px;line-height:1;">${emoji}</span>` : ""}
+      <span style="font-family:inherit;font-size:12px;font-weight:700;color:#fff;">${label}</span>
+    </div>`;
+}
 
 function FilterBar() {
   return (
@@ -97,21 +113,9 @@ function Sidebar() {
   );
 }
 
-function Marker({ x, y, emoji, label, bg }) {
-  return (
-    <div
-      className="absolute flex h-9 items-center gap-1.5 rounded-full border-[3px] border-white px-3 shadow-[0_3px_8px_rgba(0,0,0,0.2)]"
-      style={{ left: x, top: y, backgroundColor: bg }}
-    >
-      {emoji && <span className="text-sm leading-none">{emoji}</span>}
-      <span className="font-body text-xs font-bold text-fg-inverse">{label}</span>
-    </div>
-  );
-}
-
 function StorePopover() {
   return (
-    <div className="absolute left-[540px] top-[60px] flex w-[436px] flex-col gap-3.5 rounded-2xl bg-surface-primary p-5 shadow-[0_8px_24px_rgba(0,0,0,0.16)]">
+    <div className="absolute left-[540px] top-[60px] z-10 flex w-[436px] flex-col gap-3.5 rounded-2xl bg-surface-primary p-5 shadow-[0_8px_24px_rgba(0,0,0,0.16)]">
       <div className="flex w-full gap-3.5">
         <div className="flex h-[88px] w-[88px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface-warm">
           <span className="text-[40px] leading-none">🟣</span>
@@ -147,36 +151,75 @@ function StorePopover() {
 }
 
 function MapArea() {
+  const mapEl = useRef(null);
+  const mapRef = useRef(null);
+
+  useEffect(() => {
+    let canceled = false;
+
+    loadNaverMaps()
+      .then((maps) => {
+        if (canceled || !mapEl.current) return;
+
+        const map = new maps.Map(mapEl.current, {
+          center: new maps.LatLng(MY_LOCATION.lat, MY_LOCATION.lng),
+          zoom: 15,
+          mapDataControl: false,
+          scaleControl: false,
+          logoControl: true,
+          zoomControl: false,
+        });
+        mapRef.current = map;
+
+        // 내 위치
+        new maps.Marker({
+          position: new maps.LatLng(MY_LOCATION.lat, MY_LOCATION.lng),
+          map,
+          icon: {
+            content: `<div style="display:flex;height:28px;width:28px;align-items:center;justify-content:center;
+              border-radius:9999px;border:4px solid #fff;background:#1A73E8;transform:translate(-50%,-50%);
+              box-shadow:0 2px 6px rgba(0,0,0,0.25);">
+              <span style="height:10px;width:10px;border-radius:9999px;background:#fff;"></span></div>`,
+          },
+        });
+
+        // 매장 마커
+        markers.forEach((m) => {
+          new maps.Marker({
+            position: new maps.LatLng(m.lat, m.lng),
+            map,
+            icon: { content: markerHtml(m) },
+          });
+        });
+      })
+      .catch((err) => {
+        // 키 미설정 등 로드 실패 시 콘솔에만 표시 (UI는 빈 회색 배경 유지)
+        console.error("[NaverMap]", err.message);
+      });
+
+    return () => {
+      canceled = true;
+      mapRef.current?.destroy?.();
+      mapRef.current = null;
+    };
+  }, []);
+
+  const zoomBy = (delta) => {
+    const map = mapRef.current;
+    if (map) map.setZoom(map.getZoom() + delta, true);
+  };
+
+  const recenter = () => {
+    mapRef.current?.panTo(new window.naver.maps.LatLng(MY_LOCATION.lat, MY_LOCATION.lng));
+  };
+
   return (
     <div className="relative flex-1 overflow-hidden bg-[#E8EDF0]">
-      {/* decorative streets */}
-      <div className="absolute left-[-30px] top-[160px] h-[60px] w-[1100px] -rotate-3 bg-[#C8D2D9]" />
-      <div className="absolute left-[-30px] top-[460px] h-[80px] w-[1100px] rotate-2 bg-[#C8D2D9]" />
-      <div className="absolute left-[-30px] top-[740px] h-[50px] w-[1100px] -rotate-1 bg-[#C8D2D9]" />
-      <div className="absolute left-[180px] top-[-40px] h-[1100px] w-[50px] rotate-6 bg-[#C8D2D9]" />
-      <div className="absolute left-[520px] top-[-40px] h-[1100px] w-[60px] -rotate-3 bg-[#C8D2D9]" />
-      <div className="absolute left-[780px] top-[-40px] h-[1100px] w-[40px] rotate-[8deg] bg-[#C8D2D9]" />
-      <div className="absolute left-[300px] top-[300px] h-[520px] w-[520px] rounded-full bg-[#D8E5DD] opacity-40" />
-      <div className="absolute left-[430px] top-[430px] h-[260px] w-[260px] rounded-full border-2 border-accent bg-accent-soft opacity-40" />
-
-      {/* my location */}
-      <div className="absolute left-[546px] top-[546px] flex h-7 w-7 items-center justify-center rounded-full border-4 border-white bg-[#1A73E8]">
-        <span className="h-2.5 w-2.5 rounded-full bg-white" />
-      </div>
-      <span className="absolute left-[580px] top-[548px] flex h-6 items-center rounded-full bg-surface-inverse px-2.5 font-body text-[11px] font-semibold text-fg-inverse">
-        내 위치
-      </span>
-
-      {markers.map((m, i) => (
-        <Marker key={i} {...m} />
-      ))}
-
-      <span className="absolute left-[820px] top-[160px] flex h-12 w-12 items-center justify-center rounded-full border-4 border-white bg-accent font-data text-sm font-bold text-fg-inverse shadow-[0_3px_8px_rgba(0,0,0,0.2)]">
-        +8
-      </span>
+      {/* 실제 네이버 지도 */}
+      <div ref={mapEl} className="absolute inset-0 h-full w-full" />
 
       {/* top overlay */}
-      <div className="absolute left-6 top-6 flex items-center gap-2.5 rounded-full bg-surface-primary px-4 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.09)]">
+      <div className="pointer-events-none absolute left-6 top-6 z-10 flex items-center gap-2.5 rounded-full bg-surface-primary px-4 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.09)]">
         <Info size={14} className="text-accent" />
         <span className="font-body text-xs font-medium text-fg-primary">
           우베 트렌드 활성 지역 · 마커를 클릭하면 매장 상세가 열립니다
@@ -184,14 +227,17 @@ function MapArea() {
       </div>
 
       {/* locate + zoom */}
-      <button className="absolute left-[920px] top-[660px] flex h-12 w-12 items-center justify-center rounded-full bg-surface-primary shadow-[0_2px_8px_rgba(0,0,0,0.09)]">
+      <button
+        onClick={recenter}
+        className="absolute left-[920px] top-[660px] z-10 flex h-12 w-12 items-center justify-center rounded-full bg-surface-primary shadow-[0_2px_8px_rgba(0,0,0,0.09)]"
+      >
         <LocateFixed size={20} className="text-accent" />
       </button>
-      <div className="absolute left-[920px] top-[740px] flex h-24 w-12 flex-col items-center gap-1 rounded-full bg-surface-primary p-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.09)]">
-        <button className="flex h-9 w-9 items-center justify-center">
+      <div className="absolute left-[920px] top-[740px] z-10 flex h-24 w-12 flex-col items-center gap-1 rounded-full bg-surface-primary p-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.09)]">
+        <button onClick={() => zoomBy(1)} className="flex h-9 w-9 items-center justify-center">
           <Plus size={18} className="text-fg-primary" />
         </button>
-        <button className="flex h-9 w-9 items-center justify-center">
+        <button onClick={() => zoomBy(-1)} className="flex h-9 w-9 items-center justify-center">
           <Minus size={18} className="text-fg-primary" />
         </button>
       </div>
