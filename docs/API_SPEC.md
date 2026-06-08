@@ -79,7 +79,7 @@ Authorization: Bearer <access_token>
 | 34 | DELETE | `/auth/me` | 🔑 | 회원 탈퇴(본인 매장+계정 삭제) (신규) |
 | **Trends** ||||
 | 4 | GET | `/trends` | 🔓 | 트렌드 랭킹 TOP N |
-| 5 | GET | `/trends/{trend_id}` | 🔓 | 트렌드 상세 |
+| 5 | GET | `/trends/{trend_id}` | 🔓 | 트렌드 상세(+store_count) — **프론트 미사용**(지도 필터로 대체), 백엔드 유지 |
 | 6 | GET | `/trends/search-ranking` | 🔓 | 실시간 인기 검색어 |
 | **Stores** ||||
 | 7 | GET | `/stores` | 🔓 | 매장 목록(지도/주변) |
@@ -174,8 +174,10 @@ SPA에서는 `supabase.auth.signInWithOAuth({ provider })`가 OAuth 리다이렉
 ```
 > `store_count`는 해당 트렌드를 판매하는 매장 수(파생 값).
 
-### 5) GET `/trends/{trend_id}` 🔓
-**Response 200**: 위 단일 객체 + 판매 매장 수 등.
+### 5) GET `/trends/{trend_id}` 🔓 — *프론트 미사용 (지도 필터로 대체)*
+백엔드 구현됨: 트렌드 단일 객체 + `store_count`(해당 트렌드 판매 매장 수, 파생). 단, 현재 웹 UI는 **별도 트렌드 상세 화면을 두지 않고**, 홈 랭킹 카드 클릭 → `/map?trend={trend_id}` 로 해당 트렌드 판매 매장을 지도에서 필터링한다.
+
+**Response 200**: `{ "data": { ...트렌드 필드, "store_count": 27 } }`
 
 ### 6) GET `/trends/search-ranking` 🔓
 Hero 영역 "실시간 인기 검색어". 손님의 `SEARCH_TREND` 이벤트(`analytics_logs`)를 최근 `window_hours`(기본 24h) 동안 trend별로 집계해 상위 N개를 반환하고, 직전 동일 길이 윈도우와 비교해 순위 변동을 계산한다. **DB 집계 방식**(Redis 불필요 — 트래픽 증가 시 Redis ZSET 캐싱으로 최적화 가능).
