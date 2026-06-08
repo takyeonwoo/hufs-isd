@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { MapPin, ChevronDown, List, Map as MapIcon, Info, Plus, Minus, LocateFixed, Timer, X } from "lucide-react";
 import TopNav from "../components/TopNav.jsx";
 import StoreCard from "../components/StoreCard.jsx";
@@ -279,6 +280,8 @@ function MapArea({ stores, detail, onSelect, onClose }) {
 }
 
 export default function MapPage() {
+  const [searchParams] = useSearchParams();
+  const trendParam = searchParams.get("trend"); // 홈 트렌드 카드에서 넘어온 trend_id
   const [trends, setTrends] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [stores, setStores] = useState([]);
@@ -287,11 +290,15 @@ export default function MapPage() {
   useEffect(() => {
     api.get("/trends?limit=10")
       .then((d) => {
-        setTrends(d || []);
-        if (d?.length) setActiveId(d[0].trend_id);
+        const list = d || [];
+        setTrends(list);
+        // URL ?trend=ID 가 유효하면 그 트렌드 선택, 아니면 1위 트렌드 기본 선택
+        const wanted = trendParam ? Number(trendParam) : null;
+        if (wanted && list.some((t) => t.trend_id === wanted)) setActiveId(wanted);
+        else if (list.length) setActiveId(list[0].trend_id);
       })
       .catch(() => setTrends([]));
-  }, []);
+  }, [trendParam]);
 
   useEffect(() => {
     const trendQ = activeId ? `&trend_id=${activeId}` : "";

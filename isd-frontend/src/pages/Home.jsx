@@ -179,16 +179,18 @@ export default function Home() {
             </div>
             <div className="grid grid-cols-5 gap-5">
               {trends.map((t) => (
-                <TrendCard
-                  key={t.trend_id}
-                  rank={String(t.rank)}
-                  emoji={emojiOf(t.name)}
-                  name={t.name}
-                  stores={STATUS_KO[t.status] ?? ""}
-                  score={t.trend_score != null ? String(t.trend_score) : "-"}
-                  hot={HOT_BY_STATUS[t.status] ?? HOT}
-                  delta={rankDelta(t)}
-                />
+                // 트렌드 카드 클릭 → 지도에서 해당 트렌드 판매 매장으로 이동
+                <Link key={t.trend_id} to={`/map?trend=${t.trend_id}`} className="block transition hover:-translate-y-0.5">
+                  <TrendCard
+                    rank={String(t.rank)}
+                    emoji={emojiOf(t.name)}
+                    name={t.name}
+                    stores={STATUS_KO[t.status] ?? ""}
+                    score={t.trend_score != null ? String(t.trend_score) : "-"}
+                    hot={HOT_BY_STATUS[t.status] ?? HOT}
+                    delta={rankDelta(t)}
+                  />
+                </Link>
               ))}
             </div>
           </section>
