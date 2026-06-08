@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  ChevronDown, Eye, Search, Package, TrendingUp, ArrowUp, Flame, Plus, Minus,
+  ChevronDown, Eye, Search, Package, TrendingUp, ArrowUp, ArrowDown, Flame, Plus, Minus,
   Trash2, Calendar, MousePointerClick, UserX, ImagePlus,
 } from "lucide-react";
 import TopNav from "../components/TopNav.jsx";
@@ -8,25 +8,18 @@ import DeleteStoreModal from "../components/DeleteStoreModal.jsx";
 import WithdrawModal from "../components/WithdrawModal.jsx";
 import { api } from "../lib/api.js";
 
-/* ---------- KPI ---------- */
-const kpis = [
-  {
-    title: "오늘 매장 조회수", icon: Eye, value: "1,248", sub: "어제 대비 +245",
-    pill: { label: "+24%", color: "#22A06B", bg: "#E6F6EF", icon: ArrowUp },
-  },
-  {
-    title: "인기 검색어 진입", icon: Search, value: "우베 #1", sub: "검색 → 우리 매장 노출 38%",
-    pill: { label: "HOT", color: "#FF3D3D", bg: "#FFE5E5", icon: Flame },
-  },
-  {
-    title: "오늘 재고 변경", icon: Package, value: "5", unit: "건", sub: "마지막 업데이트 10분 전",
-  },
-  {
-    title: "트렌드 점수", icon: TrendingUp, value: "98.2", sub: "우베 #1 매장 · 상위 1%", dark: true,
-    pill: { label: "+38%", color: "#5BE49F", bg: "#1F3D2F", icon: ArrowUp },
-  },
-];
+/* ---------- helpers ---------- */
+function timeAgo(iso) {
+  if (!iso) return "";
+  const sec = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (sec < 60) return "방금";
+  if (sec < 3600) return `${Math.floor(sec / 60)}분 전`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}시간 전`;
+  return `${Math.floor(sec / 86400)}일 전`;
+}
+const won = (n) => (n == null ? "-" : Number(n).toLocaleString());
 
+/* ---------- KPI ---------- */
 function KpiCard({ title, icon: Icon, value, unit, sub, pill, dark }) {
   return (
     <div className={"flex flex-1 flex-col justify-between gap-3.5 rounded-2xl p-6 " + (dark ? "bg-surface-inverse" : "bg-surface-primary")}>
@@ -49,25 +42,53 @@ function KpiCard({ title, icon: Icon, value, unit, sub, pill, dark }) {
   );
 }
 
+function buildKpis(summary) {
+  const s = summary || {};
+  const up = (s.store_views_change_pct ?? 0) >= 0;
+  const scoreUp = (s.trend_score_change_pct ?? 0) >= 0;
+  return [
+    {
+      title: "오늘 매장 조회수", icon: Eye, value: won(s.store_views_today ?? 0),
+      sub: `어제 대비 ${(s.store_views_delta ?? 0) >= 0 ? "+" : ""}${s.store_views_delta ?? 0}`,
+      pill: {
+        label: `${up ? "+" : ""}${s.store_views_change_pct ?? 0}%`,
+        color: up ? "#22A06B" : "#FF3D3D", bg: up ? "#E6F6EF" : "#FFE5E5", icon: up ? ArrowUp : ArrowDown,
+      },
+    },
+    s.search_entry_trend
+      ? {
+          title: "인기 검색어 진입", icon: Search,
+          value: `${s.search_entry_trend.name} #${s.search_entry_trend.rank ?? "-"}`,
+          sub: "검색 → 우리 매장 노출", pill: { label: "HOT", color: "#FF3D3D", bg: "#FFE5E5", icon: Flame },
+        }
+      : { title: "인기 검색어 진입", icon: Search, value: "-", sub: "데이터 없음" },
+    {
+      title: "오늘 재고 변경", icon: Package, value: String(s.stock_changes_today ?? 0), unit: "건",
+      sub: s.last_stock_update ? `마지막 업데이트 ${timeAgo(s.last_stock_update)}` : "변경 없음",
+    },
+    {
+      title: "트렌드 점수", icon: TrendingUp, value: s.trend_score != null ? String(s.trend_score) : "-",
+      sub: s.trend_percentile != null ? `상위 ${s.trend_percentile}위 매장` : "데이터 없음", dark: true,
+      pill: s.trend_score_change_pct != null
+        ? { label: `${scoreUp ? "+" : ""}${s.trend_score_change_pct}%`, color: "#5BE49F", bg: "#1F3D2F", icon: scoreUp ? ArrowUp : ArrowDown }
+        : undefined,
+    },
+  ];
+}
+
 /* ---------- Inventory ---------- */
 const AVAIL = { label: "판매중", color: "#22A06B", bg: "#E6F6EF" };
 const LOW = { label: "품절임박", color: "#F5A524", bg: "#FFF3D8" };
 const OUT = { label: "품절", color: "#888888", bg: "#F7F8FA" };
 const PILL_BY_STATUS = { AVAILABLE: AVAIL, LOW, SOLD_OUT: OUT };
 
-const rows = [
-  { name: "우베 케이크", thumb: "#F3D9FF", price: "6,800", trend: "🟣 우베", qty: 8, status: AVAIL },
-  { name: "우베 라떼", thumb: "#F3D9FF", price: "5,500", trend: "🟣 우베", qty: 14, status: AVAIL },
-  { name: "우베 크림빵", thumb: "#FFF3D8", price: "4,200", trend: "🟣 우베", qty: 3, status: LOW, qtyBg: "#FFF3D8" },
-  { name: "우베 쿠키", thumb: "#F0F0F0", price: "2,800", trend: "🟣 우베", qty: 0, status: OUT },
-];
-
-function QtyBox({ qty, bg = "#F7F8FA" }) {
+function QtyBox({ qty, onDelta, busy }) {
+  const bg = qty <= 0 ? "#F7F8FA" : qty <= 5 ? "#FFF3D8" : "#F7F8FA";
   return (
     <span className="inline-flex h-8 items-center gap-1 rounded-full px-1" style={{ backgroundColor: bg }}>
-      <button className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-primary"><Minus size={12} className="text-fg-secondary" /></button>
+      <button disabled={busy} onClick={() => onDelta?.(-1)} className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-primary disabled:opacity-40"><Minus size={12} className="text-fg-secondary" /></button>
       <span className="w-7 text-center font-data text-xs font-bold text-fg-primary">{qty}</span>
-      <button className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-primary"><Plus size={12} className="text-fg-secondary" /></button>
+      <button disabled={busy} onClick={() => onDelta?.(1)} className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-primary disabled:opacity-40"><Plus size={12} className="text-fg-secondary" /></button>
     </span>
   );
 }
@@ -78,6 +99,58 @@ function StatusPill({ status }) {
       <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: status.color }} />
       <span className="font-body text-[11px] font-semibold" style={{ color: status.color }}>{status.label}</span>
     </span>
+  );
+}
+
+function ProductRow({ p, trends, onChanged, onDeleted }) {
+  const [qty, setQty] = useState(p.quantity);
+  const [status, setStatus] = useState(p.stock_status);
+  const [busy, setBusy] = useState(false);
+
+  const changeQty = async (delta) => {
+    setBusy(true);
+    try {
+      const res = await api.patch(`/products/${p.product_id}/quantity`, { delta });
+      setQty(res.quantity);
+      setStatus(res.stock_status);
+      onChanged?.(p.product_id);
+    } catch (e) {
+      alert(`수량 변경 실패: ${e.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm(`'${p.name}' 메뉴를 삭제할까요?`)) return;
+    try {
+      await api.del(`/products/${p.product_id}`);
+      onDeleted?.(p.product_id);
+    } catch (e) {
+      alert(`삭제 실패: ${e.message}`);
+    }
+  };
+
+  return (
+    <div className="flex items-center bg-surface-primary px-5 py-3.5">
+      <div className="flex w-[220px] items-center gap-2.5">
+        <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-surface-secondary">
+          {p.image_url && <img src={p.image_url} alt="" className="h-full w-full object-cover" />}
+        </span>
+        <span className="font-body text-[13px] font-bold text-fg-primary">{p.name}</span>
+      </div>
+      <span className="w-20 font-data text-[13px] font-semibold text-fg-primary">{won(p.price)}</span>
+      <div className="w-[140px]">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 font-body text-[11px] font-semibold text-accent">
+          {trends.find((t) => t.trend_id === p.trend_id)?.name ?? "트렌드"}
+        </span>
+      </div>
+      <div className="w-[150px]"><QtyBox qty={qty} onDelta={changeQty} busy={busy} /></div>
+      <div className="w-[110px]"><StatusPill status={PILL_BY_STATUS[status] ?? OUT} /></div>
+      <div className="flex flex-1 justify-end">
+        <button onClick={remove} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><Trash2 size={14} className="text-fg-muted" /></button>
+      </div>
+    </div>
   );
 }
 
@@ -200,7 +273,33 @@ function AddProductRow({ storeId, trends, onCreated }) {
 }
 
 function InventoryCard({ storeId, trends }) {
-  const [added, setAdded] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [q, setQ] = useState("");
+
+  const loadLogs = useCallback(async (items) => {
+    // 매장 전 상품의 inventory-logs 를 모아 최신순 상위 몇 건만.
+    const all = await Promise.all(
+      items.map((p) =>
+        api.get(`/products/${p.product_id}/inventory-logs?limit=5`)
+          .then((rows) => (rows || []).map((l) => ({ ...l, name: p.name })))
+          .catch(() => [])
+      )
+    );
+    const merged = all.flat().sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1)).slice(0, 5);
+    setLogs(merged);
+  }, []);
+
+  const load = useCallback(async () => {
+    if (!storeId) return;
+    const path = `/stores/${storeId}/products${q ? `?q=${encodeURIComponent(q)}` : ""}`;
+    const items = await api.get(path).catch(() => []);
+    setProducts(items || []);
+    loadLogs(items || []);
+  }, [storeId, q, loadLogs]);
+
+  useEffect(() => { load(); }, [load]);
+
   return (
     <div className="flex flex-col gap-[18px] rounded-2xl bg-surface-primary p-7">
       <div className="flex w-full items-center justify-between">
@@ -211,12 +310,13 @@ function InventoryCard({ storeId, trends }) {
         <div className="flex items-center gap-2">
           <span className="flex h-9 w-[200px] items-center gap-1.5 rounded-full bg-surface-secondary px-3.5">
             <Search size={14} className="text-fg-muted" />
-            <span className="font-body text-xs text-fg-muted">메뉴 검색</span>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="메뉴 검색"
+              className="w-full bg-transparent font-body text-xs text-fg-primary outline-none placeholder:text-fg-muted"
+            />
           </span>
-          <button className="flex h-9 items-center gap-1.5 rounded-full bg-accent px-3.5">
-            <Plus size={12} className="text-fg-inverse" />
-            <span className="font-body text-xs font-bold text-fg-inverse">메뉴 등록</span>
-          </button>
         </div>
       </div>
 
@@ -229,74 +329,93 @@ function InventoryCard({ storeId, trends }) {
           <span className="w-[110px]">상태</span>
           <span className="flex-1 text-right">삭제</span>
         </div>
-        {rows.map((r) => (
-          <div key={r.name} className="flex items-center bg-surface-primary px-5 py-3.5">
-            <div className="flex w-[220px] items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: r.thumb }} />
-              <span className="font-body text-[13px] font-bold text-fg-primary">{r.name}</span>
-            </div>
-            <span className="w-20 font-data text-[13px] font-semibold text-fg-primary">{r.price}</span>
-            <div className="w-[140px]">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 font-body text-[11px] font-semibold text-accent">{r.trend}</span>
-            </div>
-            <div className="w-[150px]"><QtyBox qty={r.qty} bg={r.qtyBg} /></div>
-            <div className="w-[110px]"><StatusPill status={r.status} /></div>
-            <div className="flex flex-1 justify-end">
-              <button className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><Trash2 size={14} className="text-fg-muted" /></button>
-            </div>
-          </div>
-        ))}
-        {added.map((r) => (
-          <div key={r.product_id} className="flex items-center bg-surface-primary px-5 py-3.5">
-            <div className="flex w-[220px] items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-surface-secondary">
-                {r.image_url && <img src={r.image_url} alt="" className="h-full w-full object-cover" />}
-              </span>
-              <span className="font-body text-[13px] font-bold text-fg-primary">{r.name}</span>
-            </div>
-            <span className="w-20 font-data text-[13px] font-semibold text-fg-primary">{r.price?.toLocaleString() ?? "-"}</span>
-            <div className="w-[140px]">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 font-body text-[11px] font-semibold text-accent">
-                {trends.find((t) => t.trend_id === r.trend_id)?.name ?? "트렌드"}
-              </span>
-            </div>
-            <div className="w-[150px]"><QtyBox qty={r.quantity} /></div>
-            <div className="w-[110px]"><StatusPill status={PILL_BY_STATUS[r.stock_status] ?? OUT} /></div>
-            <div className="flex flex-1 justify-end">
-              <button className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><Trash2 size={14} className="text-fg-muted" /></button>
-            </div>
-          </div>
+        {products.length === 0 && (
+          <div className="px-5 py-6 text-center font-body text-xs text-fg-muted">등록된 메뉴가 없습니다. 아래에서 추가하세요.</div>
+        )}
+        {products.map((p) => (
+          <ProductRow
+            key={p.product_id}
+            p={p}
+            trends={trends}
+            onChanged={() => loadLogs(products)}
+            onDeleted={(id) => setProducts((arr) => arr.filter((x) => x.product_id !== id))}
+          />
         ))}
         <AddProductRow
           storeId={storeId}
           trends={trends}
-          onCreated={(p) => setAdded((a) => [...a, p])}
+          onCreated={(p) => setProducts((a) => [...a, p])}
         />
       </div>
 
       <div className="flex flex-col gap-3 rounded-xl bg-surface-secondary p-[18px]">
         <span className="font-body text-[13px] font-bold text-fg-primary">⏱ 최근 재고 변경 이력</span>
-        {[
-          { t: "10:32", n: "우베 케이크", c: "12 → 8", tag: "−4개", color: "#FF3D3D" },
-          { t: "10:14", n: "우베 쿠키", c: "2 → 0 (품절 처리)", tag: "품절", color: "#888888" },
-          { t: "09:48", n: "우베 크림빵", c: "0 → 5 (입고)", tag: "+5개", color: "#22A06B" },
-        ].map((h) => (
-          <div key={h.t} className="flex w-full items-center justify-between rounded-lg bg-surface-primary px-3.5 py-2.5">
-            <div className="flex items-center gap-2">
-              <span className="font-data text-[11px] text-fg-muted">{h.t}</span>
-              <span className="font-body text-xs font-semibold text-fg-primary">{h.n}</span>
-              <span className="font-data text-[11px] text-fg-secondary">{h.c}</span>
+        {logs.length === 0 && <span className="font-body text-[11px] text-fg-muted">변경 이력이 없습니다.</span>}
+        {logs.map((h) => {
+          const diff = (h.new_quantity ?? 0) - (h.old_quantity ?? 0);
+          const color = h.new_quantity === 0 ? "#888888" : diff < 0 ? "#FF3D3D" : "#22A06B";
+          const tag = h.new_quantity === 0 ? "품절" : `${diff > 0 ? "+" : ""}${diff}개`;
+          return (
+            <div key={h.log_id} className="flex w-full items-center justify-between rounded-lg bg-surface-primary px-3.5 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="font-data text-[11px] text-fg-muted">{timeAgo(h.updated_at)}</span>
+                <span className="font-body text-xs font-semibold text-fg-primary">{h.name}</span>
+                <span className="font-data text-[11px] text-fg-secondary">{h.old_quantity} → {h.new_quantity}</span>
+              </div>
+              <span className="font-data text-[11px] font-bold" style={{ color }}>{tag}</span>
             </div>
-            <span className="font-data text-[11px] font-bold" style={{ color: h.color }}>{h.tag}</span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
 /* ---------- Notice ---------- */
-function NoticeCard() {
+function NoticeCard({ storeId }) {
+  const [notices, setNotices] = useState([]);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!storeId) return;
+    const rows = await api.get(`/stores/${storeId}/notices?status=PUBLISHED`).catch(() => []);
+    setNotices(rows || []);
+  }, [storeId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const publish = async () => {
+    if (!storeId) return alert("매장 정보를 아직 불러오지 못했습니다.");
+    if (!draft.trim()) return alert("공지 내용을 입력하세요.");
+    setSaving(true);
+    try {
+      await api.post(`/stores/${storeId}/notices`, { content: draft.trim(), status: "PUBLISHED" });
+      setDraft("");
+      load();
+    } catch (e) {
+      alert(`게시 실패: ${e.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (id) => {
+    if (!confirm("이 공지를 삭제할까요?")) return;
+    try {
+      await api.del(`/notices/${id}`);
+      setNotices((arr) => arr.filter((n) => n.notice_id !== id));
+    } catch (e) {
+      alert(`삭제 실패: ${e.message}`);
+    }
+  };
+
+  const dday = (iso) => {
+    if (!iso) return null;
+    const d = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
+    return d >= 0 ? `만료 D-${d}` : "만료됨";
+  };
+
   return (
     <div className="flex flex-col gap-[18px] rounded-2xl bg-surface-primary p-7">
       <div className="flex w-full items-center justify-between">
@@ -304,7 +423,7 @@ function NoticeCard() {
           <h3 className="font-heading text-xl font-bold text-fg-primary">📢 공지 관리</h3>
           <p className="font-body text-xs text-fg-secondary">공지는 매장 상세 화면 상단에 띄워져 손님이 가장 먼저 확인합니다</p>
         </div>
-        <span className="flex h-9 items-center rounded-full bg-surface-secondary px-3.5 font-body text-xs font-semibold text-fg-primary">게시 중 1건</span>
+        <span className="flex h-9 items-center rounded-full bg-surface-secondary px-3.5 font-body text-xs font-semibold text-fg-primary">게시 중 {notices.length}건</span>
       </div>
 
       <div className="flex flex-col gap-3 rounded-xl bg-surface-secondary p-[18px]">
@@ -312,14 +431,20 @@ function NoticeCard() {
           <span className="rounded-full bg-accent px-2.5 py-[3px] font-body text-[10px] font-bold text-fg-inverse">NEW</span>
           <span className="font-body text-[13px] font-bold text-fg-primary">빠른 공지 작성</span>
         </div>
-        <div className="flex h-[120px] w-full rounded-lg border border-border-soft bg-surface-primary px-4 py-3.5">
-          <p className="font-body text-[13px] leading-[1.6] text-fg-primary">
-            우베 케이크 25개 입고 완료! 평일 17시 이후엔 소량 또는 품절될 수 있어요. 미리 방문해주세요 :)
-          </p>
-        </div>
-        <div className="flex w-full items-center justify-between">
-          <span className="font-body text-[11px] font-semibold text-accent">미리보기</span>
-          <button className="flex h-[34px] items-center rounded-full bg-accent px-4 font-body text-xs font-bold text-fg-inverse">게시하기</button>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="예) 우베 케이크 25개 입고 완료! 평일 17시 이후엔 소량 또는 품절될 수 있어요."
+          className="flex h-[120px] w-full resize-none rounded-lg border border-border-soft bg-surface-primary px-4 py-3.5 font-body text-[13px] leading-[1.6] text-fg-primary outline-none placeholder:text-fg-muted"
+        />
+        <div className="flex w-full items-center justify-end">
+          <button
+            onClick={publish}
+            disabled={saving}
+            className="flex h-[34px] items-center rounded-full bg-accent px-4 font-body text-xs font-bold text-fg-inverse disabled:opacity-50"
+          >
+            {saving ? "게시 중…" : "게시하기"}
+          </button>
         </div>
       </div>
 
@@ -327,34 +452,37 @@ function NoticeCard() {
         <span className="font-body text-[13px] font-bold text-fg-primary">게시 중인 공지</span>
         <span className="font-body text-[11px] font-semibold text-fg-muted">최신순</span>
       </div>
-      <div className="flex flex-col gap-2 rounded-xl bg-surface-warm p-[18px]">
-        <div className="flex w-full items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-accent px-2.5 py-[3px] font-body text-[10px] font-bold text-fg-inverse">게시중</span>
-            <span className="font-body text-[13px] font-bold text-fg-primary">우베 케이크 입고 안내</span>
+      {notices.length === 0 && <span className="font-body text-[11px] text-fg-muted">게시 중인 공지가 없습니다.</span>}
+      {notices.map((n) => (
+        <div key={n.notice_id} className="flex flex-col gap-2 rounded-xl bg-surface-warm p-[18px]">
+          <div className="flex w-full items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-accent px-2.5 py-[3px] font-body text-[10px] font-bold text-fg-inverse">게시중</span>
+            </div>
+            <button onClick={() => remove(n.notice_id)} className="font-body text-[11px] font-semibold text-accent">삭제</button>
           </div>
-          <span className="font-body text-[11px] font-semibold text-accent">수정 · 삭제</span>
+          <p className="font-body text-xs leading-[1.6] text-fg-secondary">{n.content}</p>
+          {dday(n.expires_at) && <span className="font-body text-[11px] text-fg-muted">{dday(n.expires_at)}</span>}
         </div>
-        <p className="font-body text-xs leading-[1.6] text-fg-secondary">
-          매일 한정 수량으로 들어옵니다. 오늘 17시 이후엔 소량 또는 품절될 수 있어요. 미리 방문해주세요!
-        </p>
-        <span className="font-body text-[11px] text-fg-muted">만료 D-3</span>
-      </div>
+      ))}
     </div>
   );
 }
 
 /* ---------- Right column ---------- */
-const bars = [18, 28, 44, 40, 55, 80, 112, 138, 160, 148, 108, 72];
-const accentBars = [8, 9];
-
-function ChartCard() {
+function ChartCard({ series }) {
+  const buckets = series?.buckets || [];
+  const max = Math.max(1, ...buckets.map((b) => b.views));
+  const peakHour = series?.peak?.from;
   return (
     <div className="flex flex-col gap-[18px] rounded-2xl bg-surface-primary p-6">
       <div className="flex w-full items-center justify-between">
         <div className="flex flex-col gap-1">
           <h3 className="font-heading text-base font-bold text-fg-primary">시간대별 매장 조회</h3>
-          <p className="font-body text-[11px] text-fg-muted">오늘 1,248회 · 피크 14:00 ~ 16:00</p>
+          <p className="font-body text-[11px] text-fg-muted">
+            {`최근 ${series?.range ?? "7d"} ${won(series?.total ?? 0)}회`}
+            {series?.peak ? ` · 피크 ${series.peak.from} ~ ${series.peak.to}` : ""}
+          </p>
         </div>
         <span className="flex h-8 items-center gap-1.5 rounded-full bg-surface-secondary px-3">
           <Calendar size={12} className="text-fg-primary" />
@@ -363,31 +491,22 @@ function ChartCard() {
         </span>
       </div>
       <div className="flex h-[180px] w-full items-end gap-1.5">
-        {bars.map((h, i) => (
-          <div key={i} className="flex flex-1 items-end">
+        {buckets.length === 0 && <span className="m-auto font-body text-xs text-fg-muted">조회 데이터가 없습니다.</span>}
+        {buckets.map((b) => (
+          <div key={b.hour} className="flex flex-1 flex-col items-center justify-end gap-1">
             <div
               className="w-full rounded-t-lg rounded-b"
-              style={{ height: h, backgroundColor: accentBars.includes(i) ? "#7C3AED" : "#E8EAEE" }}
+              style={{ height: Math.max(4, (b.views / max) * 160), backgroundColor: b.hour === peakHour?.slice(0, 2) ? "#7C3AED" : "#E8EAEE" }}
             />
+            <span className="font-data text-[9px] text-fg-muted">{b.hour}</span>
           </div>
         ))}
-      </div>
-      <div className="flex w-full items-center justify-between font-data text-[10px] text-fg-muted">
-        {["08", "10", "12", "14", "16", "18", "20"].map((x) => <span key={x}>{x}</span>)}
       </div>
     </div>
   );
 }
 
-const topProds = [
-  { emoji: "🟣", name: "우베", value: "1,420", pct: 100 },
-  { emoji: "🍫", name: "두바이초콜릿", value: "980", pct: 69 },
-  { emoji: "🍡", name: "두쫀쿠", value: "620", pct: 44 },
-  { emoji: "🧈", name: "버터떡", value: "240", pct: 17 },
-  { emoji: "🥐", name: "크루키", value: "95", pct: 7 },
-];
-
-function TopProdCard() {
+function TopProdCard({ items }) {
   return (
     <div className="flex flex-col gap-4 rounded-2xl bg-surface-primary p-6">
       <div className="flex w-full items-center justify-between">
@@ -398,14 +517,12 @@ function TopProdCard() {
           <ChevronDown size={12} className="text-fg-muted" />
         </span>
       </div>
-      {topProds.map((p) => (
-        <div key={p.name} className="flex flex-col gap-2">
+      {(!items || items.length === 0) && <span className="font-body text-xs text-fg-muted">조회 데이터가 없습니다.</span>}
+      {(items || []).map((p) => (
+        <div key={p.trend_id} className="flex flex-col gap-2">
           <div className="flex w-full items-center justify-between">
-            <span className="flex items-center gap-2">
-              <span className="text-sm leading-none">{p.emoji}</span>
-              <span className="font-body text-[13px] font-semibold text-fg-primary">{p.name}</span>
-            </span>
-            <span className="font-data text-[13px] font-bold text-fg-primary">{p.value}</span>
+            <span className="font-body text-[13px] font-semibold text-fg-primary">{p.name}</span>
+            <span className="font-data text-[13px] font-bold text-fg-primary">{won(p.views)}</span>
           </div>
           <div className="h-1.5 w-full rounded-full bg-surface-secondary">
             <div className="h-1.5 rounded-full bg-accent" style={{ width: p.pct + "%" }} />
@@ -416,31 +533,30 @@ function TopProdCard() {
   );
 }
 
-const events = [
-  { icon: Eye, title: "VIEW_STORE · 신규 사용자 24명", desc: "우베 검색 → 매장 상세 진입", time: "방금" },
-  { icon: MousePointerClick, title: "CLICK_MARKER · 마커 클릭 18회", desc: "홍대입구 반경 1km 사용자", time: "3분 전" },
-  { icon: Search, title: "SEARCH_TREND · 우베 검색 진입", desc: "홈 → 우베 트렌드 카드 클릭", time: "12분 전" },
-];
+const EVENT_ICON = { VIEW_STORE: Eye, CLICK_MARKER: MousePointerClick, SEARCH_TREND: Search };
 
-function EventCard() {
+function EventCard({ events }) {
   return (
     <div className="flex flex-col gap-3.5 rounded-2xl bg-surface-primary p-6">
       <div className="flex w-full items-center justify-between">
         <h3 className="font-heading text-base font-bold text-fg-primary">📊 최근 이벤트 로그</h3>
         <span className="font-body text-[11px] font-semibold text-accent">전체</span>
       </div>
-      {events.map((e) => (
-        <div key={e.title} className="flex w-full items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-secondary">
-            <e.icon size={14} className="text-fg-secondary" />
-          </span>
-          <div className="flex flex-1 flex-col gap-0.5">
-            <span className="font-body text-xs font-semibold text-fg-primary">{e.title}</span>
-            <span className="font-body text-[11px] text-fg-muted">{e.desc}</span>
+      {(!events || events.length === 0) && <span className="font-body text-xs text-fg-muted">이벤트가 없습니다.</span>}
+      {(events || []).map((e) => {
+        const Icon = EVENT_ICON[e.event_type] || Eye;
+        return (
+          <div key={e.event_type} className="flex w-full items-center gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-secondary">
+              <Icon size={14} className="text-fg-secondary" />
+            </span>
+            <div className="flex flex-1 flex-col gap-0.5">
+              <span className="font-body text-xs font-semibold text-fg-primary">{e.event_type} · {e.count}회</span>
+            </div>
+            <span className="font-data text-[11px] text-fg-muted">{timeAgo(e.created_at)}</span>
           </div>
-          <span className="font-data text-[11px] text-fg-muted">{e.time}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -480,18 +596,27 @@ export default function Dashboard() {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [trends, setTrends] = useState([]);
   const [store, setStore] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [series, setSeries] = useState(null);
+  const [byTrend, setByTrend] = useState([]);
+  const [events, setEvents] = useState([]);
 
   useEffect(() => {
-    api.get("/trends?limit=100")
-      .then((data) => setTrends(data || []))
-      .catch(() => setTrends([]));
-    // 로그인한 사장님의 첫 매장을 대시보드 대상으로 사용. (드롭다운 멀티매장은 추후)
-    api.get("/stores/me")
-      .then((stores) => setStore(stores?.[0] ?? null))
-      .catch(() => setStore(null));
+    api.get("/trends?limit=100").then((d) => setTrends(d || [])).catch(() => setTrends([]));
+    api.get("/stores/me").then((s) => setStore(s?.[0] ?? null)).catch(() => setStore(null));
   }, []);
 
   const storeId = store?.store_id;
+
+  useEffect(() => {
+    if (!storeId) return;
+    api.get(`/stores/${storeId}/analytics/summary`).then(setSummary).catch(() => setSummary(null));
+    api.get(`/stores/${storeId}/analytics/timeseries?metric=views`).then(setSeries).catch(() => setSeries(null));
+    api.get(`/stores/${storeId}/analytics/timeseries?metric=by_trend`).then((d) => setByTrend(d || [])).catch(() => setByTrend([]));
+    api.get(`/stores/${storeId}/analytics/events`).then((d) => setEvents(d || [])).catch(() => setEvents([]));
+  }, [storeId]);
+
+  const kpis = buildKpis(summary);
 
   return (
     <div className="flex min-h-screen w-full justify-center bg-surface-secondary">
@@ -507,8 +632,10 @@ export default function Dashboard() {
                 <ChevronDown size={12} className="text-fg-muted" />
               </span>
             </div>
-            <h1 className="font-heading text-[32px] font-bold text-fg-primary">안녕하세요, 김사장님 👋</h1>
-            <p className="font-body text-[13px] text-fg-secondary">오늘 5건의 재고 변경과 1,248회 매장 조회가 있었어요.</p>
+            <h1 className="font-heading text-[32px] font-bold text-fg-primary">안녕하세요, 사장님 👋</h1>
+            <p className="font-body text-[13px] text-fg-secondary">
+              오늘 {summary?.stock_changes_today ?? 0}건의 재고 변경과 {won(summary?.store_views_today ?? 0)}회 매장 조회가 있었어요.
+            </p>
           </div>
 
           {/* KPI row */}
@@ -520,12 +647,12 @@ export default function Dashboard() {
           <div className="flex gap-5">
             <div className="flex flex-1 flex-col gap-5">
               <InventoryCard storeId={storeId} trends={trends} />
-              <NoticeCard />
+              <NoticeCard storeId={storeId} />
             </div>
             <div className="flex w-[480px] flex-col gap-5">
-              <ChartCard />
-              <TopProdCard />
-              <EventCard />
+              <ChartCard series={series} />
+              <TopProdCard items={byTrend} />
+              <EventCard events={events} />
             </div>
           </div>
 
