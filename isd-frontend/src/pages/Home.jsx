@@ -184,6 +184,7 @@ export default function Home() {
                   <TrendCard
                     rank={String(t.rank)}
                     emoji={emojiOf(t.name)}
+                    image={t.image_url}
                     name={t.name}
                     stores={STATUS_KO[t.status] ?? ""}
                     score={t.trend_score != null ? String(t.trend_score) : "-"}
@@ -205,15 +206,17 @@ export default function Home() {
             <div className="grid grid-cols-3 gap-3.5">
               {nearby.length === 0 && <span className="font-body text-xs text-fg-muted">주변 매장을 불러오는 중…</span>}
               {nearby.map((s) => (
-                <StoreCard
-                  key={s.store_id}
-                  emoji={emojiOf(s.trend?.name)}
-                  name={s.name}
-                  desc={s.featured_product ? `${s.featured_product.name} · ${Number(s.featured_product.price ?? 0).toLocaleString()}원` : "등록된 메뉴 없음"}
-                  distance={s.distance_km != null ? `${s.distance_km} km` : ""}
-                  time={timeAgo(s.featured_product?.stock_updated_at)}
-                  stock={STOCK_PILL[s.featured_product?.stock_status] ?? STOCK_PILL.AVAILABLE}
-                />
+                // 매장 카드 클릭 → 지도 탭에서 해당 매장 상세(팝오버) 열기
+                <Link key={s.store_id} to={`/map?store=${s.store_id}`} className="block transition hover:-translate-y-0.5">
+                  <StoreCard
+                    emoji={emojiOf(s.trend?.name)}
+                    name={s.name}
+                    desc={s.featured_product ? `${s.featured_product.name} · ${Number(s.featured_product.price ?? 0).toLocaleString()}원` : "등록된 메뉴 없음"}
+                    distance={s.distance_km != null ? `${s.distance_km} km` : ""}
+                    time={timeAgo(s.featured_product?.stock_updated_at)}
+                    stock={STOCK_PILL[s.featured_product?.stock_status] ?? STOCK_PILL.AVAILABLE}
+                  />
+                </Link>
               ))}
             </div>
           </section>

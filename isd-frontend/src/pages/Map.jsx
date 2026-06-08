@@ -282,6 +282,7 @@ function MapArea({ stores, detail, onSelect, onClose }) {
 export default function MapPage() {
   const [searchParams] = useSearchParams();
   const trendParam = searchParams.get("trend"); // 홈 트렌드 카드에서 넘어온 trend_id
+  const storeParam = searchParams.get("store"); // 홈 주변매장 카드에서 넘어온 store_id
   const [trends, setTrends] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [stores, setStores] = useState([]);
@@ -311,6 +312,11 @@ export default function MapPage() {
     logEvent("VIEW_STORE", { store_id: id }); // (28) 매장 상세 조회
     api.get(`/stores/${id}`).then(setDetail).catch(() => setDetail(null));
   }, []);
+
+  // 홈 주변매장 카드에서 ?store=ID 로 들어오면 해당 매장 상세를 자동으로 연다
+  useEffect(() => {
+    if (storeParam) select(Number(storeParam));
+  }, [storeParam, select]);
 
   // 트렌드 칩 선택 → 필터 변경 + 검색 이벤트
   const pickTrend = useCallback((trendId) => {

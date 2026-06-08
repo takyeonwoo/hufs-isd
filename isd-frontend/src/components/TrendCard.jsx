@@ -10,6 +10,7 @@ const iconMap = { flame: Flame, "arrow-up": ArrowUp, "arrow-down": ArrowDown, "a
 export default function TrendCard({
   rank = "1",
   emoji = "🍪",
+  image = null,
   name = "두바이초콜릿",
   stores = "14 매장",
   score = "92.4",
@@ -21,9 +22,10 @@ export default function TrendCard({
 
   return (
     <div className="flex h-[320px] w-full flex-col overflow-hidden rounded-2xl bg-surface-primary shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      {/* card image */}
-      <div className="flex h-[180px] flex-col justify-between bg-surface-warm p-4">
-        <div className="flex w-full items-center justify-between">
+      {/* card image — 매장 등록 상품 사진(랜덤), 없으면 이모지 */}
+      <div className="relative flex h-[180px] flex-col justify-between bg-surface-warm p-4">
+        {image && <img src={image} alt={name} className="absolute inset-0 h-full w-full object-cover" />}
+        <div className="relative flex w-full items-center justify-between">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-inverse">
             <span className="font-data text-base font-bold text-fg-inverse">{rank}</span>
           </div>
@@ -37,9 +39,11 @@ export default function TrendCard({
             </span>
           </span>
         </div>
-        <div className="flex w-full items-center justify-center">
-          <span className="text-[64px] leading-none">{emoji}</span>
-        </div>
+        {!image && (
+          <div className="flex w-full items-center justify-center">
+            <span className="text-[64px] leading-none">{emoji}</span>
+          </div>
+        )}
       </div>
       {/* card info */}
       <div className="flex flex-1 flex-col justify-between p-5">

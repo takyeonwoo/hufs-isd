@@ -1,5 +1,6 @@
 """Trends — API_SPEC §4"""
-from collections import Counter
+import random
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Query
@@ -24,8 +25,21 @@ async def list_trends(
     query = db.table("trends").select("*").order("rank").limit(limit)
     if status is not None:
         query = query.eq("status", status.value)
-    res = query.execute()
-    return ok(res.data or [], meta={"updated_at": now})
+    rows = query.execute().data or []
+
+    # 트렌드별 대표 이미지: 해당 트렌드 판매 상품들의 image_url 중 랜덤 1장
+    ids = [t["trend_id"] for t in rows]
+    if ids:
+        prods = db.table("products").select("trend_id, image_url").in_("trend_id", ids).execute().data or []
+        imgs = defaultdict(list)
+        for p in prods:
+            if p.get("image_url"):
+                imgs[p["trend_id"]].append(p["image_url"])
+        for t in rows:
+            pool = imgs.get(t["trend_id"]) or []
+            t["image_url"] = random.choice(pool) if pool else None
+
+    return ok(rows, meta={"updated_at": now})
 
 
 @router.get("/search-ranking")
