@@ -68,23 +68,19 @@ export default function Apply() {
               <input className={inputCls} placeholder="운영 중인 카페 이름" />
             </Field>
 
-            <div className="flex w-full gap-4">
-              <Field label="매장 주소" required>
-                <div className="flex h-12 w-full items-center justify-between rounded-xl border border-border-soft bg-surface-primary px-4">
-                  <input className="flex-1 bg-transparent font-body text-[13px] text-fg-primary outline-none placeholder:text-fg-muted" placeholder="서울특별시 마포구 ..." />
-                  <span className="flex h-8 items-center gap-1.5 rounded-full bg-surface-secondary px-3.5">
-                    <Search size={12} className="text-fg-secondary" />
-                    <span className="font-body text-xs font-bold text-fg-secondary">주소 검색</span>
-                  </span>
-                </div>
-              </Field>
-              <Field label="영업시간">
-                <input className={inputCls} placeholder="예) 11:00 - 21:00" />
-              </Field>
-              <Field label="매장 연락처">
-                <input className={inputCls} placeholder="02-1234-5678" />
-              </Field>
-            </div>
+            <Field label="매장 주소" required>
+              <div className="flex h-12 w-full items-center justify-between rounded-xl border border-border-soft bg-surface-primary px-4">
+                <input className="flex-1 bg-transparent font-body text-[13px] text-fg-primary outline-none placeholder:text-fg-muted" placeholder="서울특별시 마포구 ..." />
+                <span className="flex h-8 items-center gap-1.5 rounded-full bg-surface-secondary px-3.5">
+                  <Search size={12} className="text-fg-secondary" />
+                  <span className="font-body text-xs font-bold text-fg-secondary">주소 검색</span>
+                </span>
+              </div>
+            </Field>
+
+            <Field label="매장 연락처">
+              <input className={inputCls} placeholder="02-1234-5678" />
+            </Field>
 
             <Field label="사업자등록번호" required hint="등록번호 10자리를 입력해주세요">
               <input className={inputCls + " font-data"} placeholder="000-00-00000" />
@@ -123,7 +119,7 @@ export default function Apply() {
 
             <div className="flex w-full items-center justify-center gap-1.5">
               <span className="font-body text-xs text-fg-muted">신청 전에 매장 정보를 다시 확인해보세요.</span>
-              <Link to="/signup" className="font-body text-xs font-bold text-accent">이전으로</Link>
+              <Link to="/login" className="font-body text-xs font-bold text-accent">이전으로</Link>
             </div>
           </div>
         </div>

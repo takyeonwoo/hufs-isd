@@ -1,10 +1,16 @@
 import { Link } from "react-router-dom";
-import { Flame, Mail, Lock, Eye, Check, ArrowRight } from "lucide-react";
+import { Flame, ShieldCheck } from "lucide-react";
 
 const stats = [
   { label: "등록 매장", value: "312", accent: false },
   { label: "추적 트렌드", value: "24", accent: false },
   { label: "실시간 재고", value: "LIVE", accent: true },
+];
+
+const socials = [
+  { label: "Google로 로그인", bg: "#FFFFFF", color: "#1A1A1A", border: true, badge: <span className="font-heading text-lg font-bold text-[#4285F4]">G</span> },
+  { label: "Kakao로 로그인", bg: "#FEE500", color: "#1A1A1A", badge: <span className="text-base">💬</span> },
+  { label: "Naver로 로그인", bg: "#03C75A", color: "#FFFFFF", badge: <span className="font-heading text-sm font-bold text-fg-inverse">N</span> },
 ];
 
 export default function Login() {
@@ -47,52 +53,38 @@ export default function Login() {
           </div>
         </div>
 
-        {/* right form */}
+        {/* right — social login */}
         <div className="flex flex-1 flex-col justify-center bg-surface-primary px-20 py-12">
           <div className="flex w-full flex-col gap-6">
             <div className="flex flex-col gap-2">
               <h2 className="font-heading text-[32px] font-bold text-fg-primary">사장님 로그인</h2>
-              <p className="font-body text-[13px] leading-[1.5] text-fg-secondary">매장과 메뉴 재고를 관리하려면 사장님 계정으로 로그인하세요.</p>
+              <p className="font-body text-[13px] leading-[1.5] text-fg-secondary">소셜 계정으로 매장을 관리하세요.</p>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <label className="font-body text-xs font-semibold text-fg-secondary">이메일</label>
-              <div className="flex h-12 w-full items-center gap-2.5 rounded-xl border border-border-soft bg-surface-primary px-4">
-                <Mail size={16} className="text-fg-muted" />
-                <input className="flex-1 bg-transparent font-body text-[13px] text-fg-primary outline-none placeholder:text-fg-muted" placeholder="name@foorendy.app" />
-              </div>
+            {socials.map((s) => (
+              <button
+                key={s.label}
+                className="flex h-14 w-full items-center justify-center gap-2.5 rounded-full"
+                style={{ backgroundColor: s.bg, color: s.color, border: s.border ? "1px solid #EDEEF1" : "none" }}
+              >
+                {s.badge}
+                <span className="font-body text-sm font-bold" style={{ color: s.color }}>{s.label}</span>
+              </button>
+            ))}
+
+            <div className="flex items-center gap-3 py-3">
+              <span className="h-px flex-1 bg-border-soft" />
+              <span className="font-body text-[11px] font-medium text-fg-muted">안전한 소셜 로그인</span>
+              <span className="h-px flex-1 bg-border-soft" />
             </div>
 
-            <div className="flex flex-col gap-2">
-              <div className="flex w-full items-center justify-between">
-                <label className="font-body text-xs font-semibold text-fg-secondary">비밀번호</label>
-                <span className="font-body text-[11px] font-semibold text-accent">비밀번호 찾기</span>
-              </div>
-              <div className="flex h-12 w-full items-center gap-2.5 rounded-xl border border-accent bg-surface-primary px-4">
-                <Lock size={16} className="text-accent" />
-                <input type="password" defaultValue="password" className="flex-1 bg-transparent font-data text-sm font-semibold text-fg-primary outline-none" />
-                <Eye size={16} className="text-fg-muted" />
-              </div>
-            </div>
-
-            <div className="flex w-full items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="flex h-[18px] w-[18px] items-center justify-center rounded-md bg-accent">
-                  <Check size={12} className="text-fg-inverse" />
-                </span>
-                <span className="font-body text-xs font-medium text-fg-primary">로그인 상태 유지</span>
-              </div>
-            </div>
-
-            <button className="flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-accent">
-              <span className="font-body text-sm font-bold text-fg-inverse">로그인</span>
-              <ArrowRight size={16} className="text-fg-inverse" />
-            </button>
-
-            <div className="flex w-full items-center justify-center gap-1.5">
-              <span className="font-body text-xs text-fg-secondary">아직 매장을 등록하지 않으셨나요?</span>
-              <Link to="/signup" className="font-body text-xs font-bold text-accent">사장님 회원가입</Link>
-            </div>
+            <Link
+              to="/admin/login"
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-surface-inverse"
+            >
+              <ShieldCheck size={14} className="text-fg-inverse" />
+              <span className="font-body text-[13px] font-bold text-fg-inverse">관리자(Admin) 로그인</span>
+            </Link>
           </div>
         </div>
       </div>

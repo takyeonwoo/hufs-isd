@@ -66,7 +66,7 @@ function Hero() {
             <PrimaryButton>트렌드 지도 열기</PrimaryButton>
           </Link>
           <Link
-            to="/signup"
+            to="/login"
             className="inline-flex h-11 items-center justify-center rounded-full bg-[#1F1F1F] px-[22px] font-body text-sm font-semibold text-fg-inverse"
           >
             사장님 등록하기
