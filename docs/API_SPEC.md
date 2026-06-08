@@ -76,6 +76,7 @@ Authorization: Bearer <access_token>
 | 1 | POST | `/auth/callback` | 🔓 | 소셜 로그인 콜백(세션 교환) |
 | 2 | GET | `/auth/me` | 🔑/🛡 | 내 프로필 조회 |
 | 3 | POST | `/auth/logout` | 🔑/🛡 | 로그아웃 |
+| 34 | DELETE | `/auth/me` | 🔑 | 회원 탈퇴(본인 매장+계정 삭제) (신규) |
 | **Trends** ||||
 | 4 | GET | `/trends` | 🔓 | 트렌드 랭킹 TOP N |
 | 5 | GET | `/trends/{trend_id}` | 🔓 | 트렌드 상세 |
@@ -85,6 +86,7 @@ Authorization: Bearer <access_token>
 | 8 | GET | `/stores/{store_id}` | 🔓 | 매장 상세(팝오버) |
 | 9 | GET | `/stores/me` | 🔑 | 내 매장 목록 |
 | 10 | PATCH | `/stores/{store_id}` | 🔑 | 매장 정보 수정 |
+| 35 | DELETE | `/stores/{store_id}` | 🔑 | 매장 삭제(본인 매장만) (신규) |
 | **Products / 재고** ||||
 | 11 | GET | `/stores/{store_id}/products` | 🔓 | 매장 상품 목록 |
 | 12 | POST | `/stores/{store_id}/products` | 🔑 | 상품 등록 |
@@ -146,6 +148,15 @@ Authorization: Bearer <access_token>
 ```
 
 ### 3) POST `/auth/logout` 🔑/🛡 → `204 No Content`
+
+### 34) DELETE `/auth/me` 🔑 (신규)
+회원 탈퇴. UI.pen "10 회원 탈퇴" 플로우. 본인 소유 매장과 계정을 모두 삭제한다.
+
+1. 본인 `stores` 삭제 → FK cascade 로 `products`/`store_notices`/`inventory_logs` 동반 삭제
+2. `owners` 행 삭제
+3. Supabase Auth 유저 삭제(service-role admin)
+
+→ `204 No Content`
 
 ---
 
@@ -261,6 +272,11 @@ Hero 영역 "실시간 인기 검색어" (Redis 집계, 5초 간격).
 
 ### 10) PATCH `/stores/{store_id}` 🔑
 본인 매장만. Body: `name`, `address`, `phone`, `naver_place_url` 등 부분 수정.
+
+### 35) DELETE `/stores/{store_id}` 🔑 (신규)
+매장 삭제(본인 매장만). FK cascade 로 메뉴/재고/공지/재고이력도 함께 삭제. 존재하지 않으면 `404 STORE_NOT_FOUND`, 타인 매장이면 `403`.
+
+→ `204 No Content`
 
 ---
 

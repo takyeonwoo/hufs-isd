@@ -8,9 +8,6 @@ import DeleteStoreModal from "../components/DeleteStoreModal.jsx";
 import WithdrawModal from "../components/WithdrawModal.jsx";
 import { api } from "../lib/api.js";
 
-// TODO: 로그인 + GET /stores/me 연결되면 실제 매장 id 로 교체.
-const CURRENT_STORE_ID = 1;
-
 /* ---------- KPI ---------- */
 const kpis = [
   {
@@ -109,6 +106,7 @@ function AddProductRow({ storeId, trends, onCreated }) {
   };
 
   const submit = async () => {
+    if (!storeId) return alert("매장 정보를 아직 불러오지 못했습니다.");
     if (!name.trim()) return alert("메뉴명을 입력하세요.");
     if (!trendId) return alert("트렌드를 선택하세요.");
     setSaving(true);
@@ -481,12 +479,19 @@ export default function Dashboard() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [trends, setTrends] = useState([]);
+  const [store, setStore] = useState(null);
 
   useEffect(() => {
     api.get("/trends?limit=100")
       .then((data) => setTrends(data || []))
       .catch(() => setTrends([]));
+    // 로그인한 사장님의 첫 매장을 대시보드 대상으로 사용. (드롭다운 멀티매장은 추후)
+    api.get("/stores/me")
+      .then((stores) => setStore(stores?.[0] ?? null))
+      .catch(() => setStore(null));
   }, []);
+
+  const storeId = store?.store_id;
 
   return (
     <div className="flex min-h-screen w-full justify-center bg-surface-secondary">
@@ -498,7 +503,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2.5">
               <span className="font-body text-xs font-bold text-accent">사장님 대시보드</span>
               <span className="flex h-7 items-center gap-1.5 rounded-full border border-border-soft bg-surface-primary px-3">
-                <span className="font-body text-xs font-semibold text-fg-primary">연남 우베하우스</span>
+                <span className="font-body text-xs font-semibold text-fg-primary">{store?.name ?? "매장 불러오는 중…"}</span>
                 <ChevronDown size={12} className="text-fg-muted" />
               </span>
             </div>
@@ -514,7 +519,7 @@ export default function Dashboard() {
           {/* body */}
           <div className="flex gap-5">
             <div className="flex flex-1 flex-col gap-5">
-              <InventoryCard storeId={CURRENT_STORE_ID} trends={trends} />
+              <InventoryCard storeId={storeId} trends={trends} />
               <NoticeCard />
             </div>
             <div className="flex w-[480px] flex-col gap-5">
@@ -536,8 +541,9 @@ export default function Dashboard() {
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         onConfirm={async () => {
+          if (!storeId) return alert("불러온 매장이 없습니다.");
           try {
-            await api.del(`/stores/${CURRENT_STORE_ID}`);
+            await api.del(`/stores/${storeId}`);
             alert("매장이 삭제되었습니다.");
           } catch (e) {
             alert(`매장 삭제 실패: ${e.message}`);
