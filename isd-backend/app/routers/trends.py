@@ -1,5 +1,6 @@
 """Trends — API_SPEC §4"""
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Query
 
@@ -28,11 +29,68 @@ async def list_trends(
 
 
 @router.get("/search-ranking")
-async def search_ranking():
-    """실시간 인기 검색어 (Redis 집계). (6)"""
-    # TODO: Redis ZSET 에서 최근 윈도우 검색어 랭킹 조회
-    now = datetime.now(timezone.utc).isoformat()
-    return ok([], meta={"refreshed_at": now})
+async def search_ranking(
+    limit: int = Query(5, ge=1, le=20),
+    window_hours: int = Query(24, ge=1, le=168),
+):
+    """실시간 인기 검색어. (6)
+
+    손님의 SEARCH_TREND 이벤트(analytics_logs)를 최근 window_hours 동안 trend 별로 집계해
+    상위 N개를 반환한다. 직전 동일 길이 윈도우의 순위와 비교해 순위 변동(delta/direction)도 계산.
+    (Redis 없이 DB 집계로 구현 — 추후 트래픽이 커지면 Redis ZSET 캐싱으로 최적화 가능.)
+    """
+    now = datetime.now(timezone.utc)
+    db = get_service_client()
+    if db is None:
+        return ok([], meta={"refreshed_at": now.isoformat()})
+
+    window = timedelta(hours=window_hours)
+    cur_start = (now - window).isoformat()
+    prev_start = (now - window * 2).isoformat()
+
+    def counts(start: str, end: str) -> Counter:
+        rows = (
+            db.table("analytics_logs")
+            .select("trend_id")
+            .eq("event_type", "SEARCH_TREND")
+            .gte("created_at", start)
+            .lt("created_at", end)
+            .execute()
+            .data
+            or []
+        )
+        return Counter(r["trend_id"] for r in rows if r.get("trend_id") is not None)
+
+    cur = counts(cur_start, now.isoformat())
+    prev = counts(prev_start, cur_start)
+
+    # 직전 윈도우 순위 맵 (trend_id -> rank)
+    prev_rank = {tid: i for i, (tid, _) in enumerate(prev.most_common(), start=1)}
+
+    top = cur.most_common(limit)
+    trend_ids = [tid for tid, _ in top]
+    info = {}
+    if trend_ids:
+        trs = db.table("trends").select("trend_id, name, emoji").in_("trend_id", trend_ids).execute().data or []
+        info = {t["trend_id"]: t for t in trs}
+
+    ranking = []
+    for rank, (tid, cnt) in enumerate(top, start=1):
+        t = info.get(tid, {})
+        pr = prev_rank.get(tid)
+        delta = (pr - rank) if pr is not None else 0  # +면 순위 상승
+        ranking.append(
+            {
+                "rank": rank,
+                "trend_id": tid,
+                "name": t.get("name"),
+                "emoji": t.get("emoji"),
+                "count": cnt,
+                "delta": abs(delta),
+                "direction": "up" if delta >= 0 else "down",
+            }
+        )
+    return ok(ranking, meta={"refreshed_at": now.isoformat(), "window_hours": window_hours})
 
 
 @router.get("/{trend_id}")

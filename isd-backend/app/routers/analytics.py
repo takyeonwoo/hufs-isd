@@ -31,7 +31,7 @@ async def log_event(body: AnalyticsEventIn):
             "trend_id": body.trend_id,
         }
     ).execute()
-    # TODO: SEARCH_TREND 는 Redis ZSET 인기검색어 카운트도 증가
+    # SEARCH_TREND 인기검색어 랭킹은 이 analytics_logs 를 GET /trends/search-ranking 에서 집계한다.
     return ok({"logged": True})
 
 
