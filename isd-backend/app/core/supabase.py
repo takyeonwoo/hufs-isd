@@ -34,3 +34,20 @@ def get_anon_client():
     if not create_client or not settings.supabase_url or not _is_real_key(settings.supabase_anon_key):
         return None
     return create_client(settings.supabase_url, settings.supabase_anon_key)
+
+
+def require_service_client():
+    """service 클라이언트가 반드시 필요한 라우터용. 미설정 시 500 에러.
+
+    순환 import 를 피하려고 ApiError 는 함수 안에서 import 한다.
+    """
+    client = get_service_client()
+    if client is None:
+        from app.core.responses import ApiError
+
+        raise ApiError(
+            "SUPABASE_NOT_CONFIGURED",
+            "서버 Supabase service key 가 설정되지 않았습니다. (.env SUPABASE_SERVICE_KEY)",
+            status_code=500,
+        )
+    return client

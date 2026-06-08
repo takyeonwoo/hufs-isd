@@ -37,6 +37,15 @@ async def search_ranking():
 
 @router.get("/{trend_id}")
 async def get_trend(trend_id: int):
-    """트렌드 상세. (5)"""
-    # TODO: trends 단건 조회
-    raise not_found("TREND_NOT_FOUND", "트렌드를 찾을 수 없습니다.")
+    """트렌드 상세 + 판매 매장 수(store_count). (5)"""
+    db = get_service_client()
+    if db is None:
+        raise not_found("TREND_NOT_FOUND", "트렌드를 찾을 수 없습니다.")
+    rows = db.table("trends").select("*").eq("trend_id", trend_id).execute().data or []
+    if not rows:
+        raise not_found("TREND_NOT_FOUND", "트렌드를 찾을 수 없습니다.")
+
+    # 해당 트렌드를 판매하는 매장 수(파생). 상품의 distinct store_id 집계.
+    products = db.table("products").select("store_id").eq("trend_id", trend_id).execute().data or []
+    store_count = len({p["store_id"] for p in products})
+    return ok({**rows[0], "store_count": store_count})
