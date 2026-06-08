@@ -436,6 +436,10 @@ function NoticeCard({ storeId }) {
   const [notices, setNotices] = useState([]);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  // (19) 인라인 수정
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!storeId) return;
@@ -467,6 +471,23 @@ function NoticeCard({ storeId }) {
       setNotices((arr) => arr.filter((n) => n.notice_id !== id));
     } catch (e) {
       alert(`삭제 실패: ${e.message}`);
+    }
+  };
+
+  const startEdit = (n) => { setEditingId(n.notice_id); setEditText(n.content ?? ""); };
+
+  const saveEdit = async (id) => {
+    if (!editText.trim()) return alert("공지 내용을 입력하세요.");
+    setEditSaving(true);
+    try {
+      // (19) 공지 수정
+      await api.patch(`/notices/${id}`, { content: editText.trim() });
+      setNotices((arr) => arr.map((n) => (n.notice_id === id ? { ...n, content: editText.trim() } : n)));
+      setEditingId(null);
+    } catch (e) {
+      alert(`공지 수정 실패: ${e.message}`);
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -519,9 +540,27 @@ function NoticeCard({ storeId }) {
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-accent px-2.5 py-[3px] font-body text-[10px] font-bold text-fg-inverse">게시중</span>
             </div>
-            <button onClick={() => remove(n.notice_id)} className="font-body text-[11px] font-semibold text-accent">삭제</button>
+            {editingId === n.notice_id ? (
+              <div className="flex items-center gap-2">
+                <button onClick={() => saveEdit(n.notice_id)} disabled={editSaving} className="font-body text-[11px] font-bold text-accent disabled:opacity-50">{editSaving ? "저장 중…" : "저장"}</button>
+                <button onClick={() => setEditingId(null)} className="font-body text-[11px] font-semibold text-fg-muted">취소</button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button onClick={() => startEdit(n)} className="font-body text-[11px] font-semibold text-fg-secondary">수정</button>
+                <button onClick={() => remove(n.notice_id)} className="font-body text-[11px] font-semibold text-accent">삭제</button>
+              </div>
+            )}
           </div>
-          <p className="font-body text-xs leading-[1.6] text-fg-secondary">{n.content}</p>
+          {editingId === n.notice_id ? (
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              className="h-[80px] w-full resize-none rounded-lg border border-border-soft bg-surface-primary px-3 py-2 font-body text-xs leading-[1.6] text-fg-primary outline-none"
+            />
+          ) : (
+            <p className="font-body text-xs leading-[1.6] text-fg-secondary">{n.content}</p>
+          )}
           {dday(n.expires_at) && <span className="font-body text-[11px] text-fg-muted">{dday(n.expires_at)}</span>}
         </div>
       ))}
@@ -621,6 +660,74 @@ function EventCard({ events }) {
   );
 }
 
+/* ---------- Store info editor (10) ---------- */
+function StoreEditPanel({ store, storeId, onSaved, onClose }) {
+  const [form, setForm] = useState({
+    name: store?.name ?? "",
+    address: store?.address ?? "",
+    phone: store?.phone ?? "",
+    naver_place_url: store?.naver_place_url ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const field = "h-11 w-full rounded-xl border border-border-soft bg-surface-primary px-3.5 font-body text-[13px] text-fg-primary outline-none placeholder:text-fg-muted";
+
+  const save = async () => {
+    if (!storeId) return alert("매장 정보를 아직 불러오지 못했습니다.");
+    if (!form.name.trim()) return alert("매장 이름을 입력하세요.");
+    setSaving(true);
+    try {
+      // (10) 매장 정보 수정
+      const updated = await api.patch(`/stores/${storeId}`, {
+        name: form.name.trim(),
+        address: form.address.trim() || undefined,
+        phone: form.phone.trim() || null,
+        naver_place_url: form.naver_place_url.trim() || null,
+      });
+      onSaved?.(updated ?? form);
+      onClose?.();
+    } catch (e) {
+      alert(`매장 정보 수정 실패: ${e.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3.5 rounded-2xl bg-surface-primary p-7">
+      <div className="flex w-full items-center justify-between">
+        <h3 className="font-heading text-base font-bold text-fg-primary">🏪 매장 정보 수정</h3>
+        <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><X size={14} className="text-fg-muted" /></button>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1.5">
+          <span className="font-body text-[11px] font-semibold text-fg-muted">매장 이름</span>
+          <input value={form.name} onChange={set("name")} className={field} placeholder="매장 이름" />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="font-body text-[11px] font-semibold text-fg-muted">연락처</span>
+          <input value={form.phone} onChange={set("phone")} className={field} placeholder="02-1234-5678" />
+        </label>
+        <label className="col-span-2 flex flex-col gap-1.5">
+          <span className="font-body text-[11px] font-semibold text-fg-muted">주소</span>
+          <input value={form.address} onChange={set("address")} className={field} placeholder="서울특별시 마포구 ..." />
+        </label>
+        <label className="col-span-2 flex flex-col gap-1.5">
+          <span className="font-body text-[11px] font-semibold text-fg-muted">네이버 플레이스 URL</span>
+          <input value={form.naver_place_url} onChange={set("naver_place_url")} className={field} placeholder="https://naver.me/..." />
+        </label>
+      </div>
+      <div className="flex justify-end gap-2">
+        <button onClick={onClose} className="flex h-10 items-center rounded-full bg-surface-secondary px-4 font-body text-[13px] font-bold text-fg-primary">취소</button>
+        <button onClick={save} disabled={saving} className="flex h-10 items-center gap-1.5 rounded-full bg-accent px-4 font-body text-[13px] font-bold text-fg-inverse disabled:opacity-50">
+          <Check size={14} className="text-fg-inverse" />
+          {saving ? "저장 중…" : "저장"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Account footer ---------- */
 function AccountFooter({ onLogout, onDeleteStore, onWithdraw }) {
   return (
@@ -662,6 +769,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [storeEditOpen, setStoreEditOpen] = useState(false);
   const [trends, setTrends] = useState([]);
   const [store, setStore] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -714,12 +822,28 @@ export default function Dashboard() {
               {profile?.email && (
                 <span className="font-body text-xs text-fg-muted">{profile.email}</span>
               )}
+              <button
+                onClick={() => setStoreEditOpen((v) => !v)}
+                className="flex h-7 items-center gap-1 rounded-full border border-border-soft bg-surface-primary px-2.5 font-body text-[11px] font-semibold text-fg-secondary"
+              >
+                <Pencil size={11} className="text-fg-muted" /> 정보 수정
+              </button>
             </div>
             <h1 className="font-heading text-[32px] font-bold text-fg-primary">안녕하세요, 사장님 👋</h1>
             <p className="font-body text-[13px] text-fg-secondary">
               오늘 {summary?.stock_changes_today ?? 0}건의 재고 변경과 {won(summary?.store_views_today ?? 0)}회 매장 조회가 있었어요.
             </p>
           </div>
+
+          {/* (10) 매장 정보 수정 패널 */}
+          {storeEditOpen && (
+            <StoreEditPanel
+              store={store}
+              storeId={storeId}
+              onSaved={(u) => setStore((s) => ({ ...s, ...u }))}
+              onClose={() => setStoreEditOpen(false)}
+            />
+          )}
 
           {/* KPI row */}
           <div className="flex gap-5">
