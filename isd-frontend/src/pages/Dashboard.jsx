@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   ChevronDown, Eye, Search, Package, TrendingUp, ArrowUp, ArrowDown, Flame, Plus, Minus,
-  Trash2, Calendar, MousePointerClick, UserX, ImagePlus,
+  Trash2, Calendar, MousePointerClick, UserX, ImagePlus, LogOut, Pencil, Check, X,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import TopNav from "../components/TopNav.jsx";
 import DeleteStoreModal from "../components/DeleteStoreModal.jsx";
 import WithdrawModal from "../components/WithdrawModal.jsx";
 import { api } from "../lib/api.js";
+import { supabase } from "../lib/supabase.js";
 
 /* ---------- helpers ---------- */
 function timeAgo(iso) {
@@ -106,6 +108,11 @@ function ProductRow({ p, trends, onChanged, onDeleted }) {
   const [qty, setQty] = useState(p.quantity);
   const [status, setStatus] = useState(p.stock_status);
   const [busy, setBusy] = useState(false);
+  // (13) 인라인 수정
+  const [editing, setEditing] = useState(false);
+  const [cur, setCur] = useState({ name: p.name, price: p.price, trend_id: p.trend_id });
+  const [draft, setDraft] = useState(cur);
+  const [saving, setSaving] = useState(false);
 
   const changeQty = async (delta) => {
     setBusy(true);
@@ -122,7 +129,7 @@ function ProductRow({ p, trends, onChanged, onDeleted }) {
   };
 
   const remove = async () => {
-    if (!confirm(`'${p.name}' 메뉴를 삭제할까요?`)) return;
+    if (!confirm(`'${cur.name}' 메뉴를 삭제할까요?`)) return;
     try {
       await api.del(`/products/${p.product_id}`);
       onDeleted?.(p.product_id);
@@ -131,24 +138,77 @@ function ProductRow({ p, trends, onChanged, onDeleted }) {
     }
   };
 
+  const startEdit = () => { setDraft(cur); setEditing(true); };
+
+  const save = async () => {
+    if (!draft.name.trim()) return alert("메뉴명을 입력하세요.");
+    setSaving(true);
+    try {
+      // (13) 상품 수정 — 이름/가격/트렌드
+      const updated = await api.patch(`/products/${p.product_id}`, {
+        name: draft.name.trim(),
+        price: draft.price === "" || draft.price == null ? null : Number(draft.price),
+        trend_id: draft.trend_id ? Number(draft.trend_id) : undefined,
+      });
+      setCur({
+        name: updated?.name ?? draft.name.trim(),
+        price: updated?.price ?? (draft.price === "" ? null : Number(draft.price)),
+        trend_id: updated?.trend_id ?? (draft.trend_id ? Number(draft.trend_id) : null),
+      });
+      setEditing(false);
+      onChanged?.(p.product_id);
+    } catch (e) {
+      alert(`상품 수정 실패: ${e.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editInput = "h-8 rounded-lg border border-border-soft bg-surface-primary px-2 font-body text-[13px] text-fg-primary outline-none";
+
   return (
     <div className="flex items-center bg-surface-primary px-5 py-3.5">
       <div className="flex w-[220px] items-center gap-2.5">
         <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-surface-secondary">
           {p.image_url && <img src={p.image_url} alt="" className="h-full w-full object-cover" />}
         </span>
-        <span className="font-body text-[13px] font-bold text-fg-primary">{p.name}</span>
+        {editing ? (
+          <input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} className={editInput + " w-[150px] font-bold"} />
+        ) : (
+          <span className="font-body text-[13px] font-bold text-fg-primary">{cur.name}</span>
+        )}
       </div>
-      <span className="w-20 font-data text-[13px] font-semibold text-fg-primary">{won(p.price)}</span>
+      {editing ? (
+        <input value={draft.price ?? ""} onChange={(e) => setDraft((d) => ({ ...d, price: e.target.value.replace(/[^0-9]/g, "") }))} placeholder="가격" className={editInput + " w-20 font-data"} />
+      ) : (
+        <span className="w-20 font-data text-[13px] font-semibold text-fg-primary">{won(cur.price)}</span>
+      )}
       <div className="w-[140px]">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 font-body text-[11px] font-semibold text-accent">
-          {trends.find((t) => t.trend_id === p.trend_id)?.name ?? "트렌드"}
-        </span>
+        {editing ? (
+          <select value={draft.trend_id ?? ""} onChange={(e) => setDraft((d) => ({ ...d, trend_id: e.target.value }))} className={editInput}>
+            <option value="">트렌드</option>
+            {trends.map((t) => <option key={t.trend_id} value={t.trend_id}>{t.name}</option>)}
+          </select>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 font-body text-[11px] font-semibold text-accent">
+            {trends.find((t) => t.trend_id === cur.trend_id)?.name ?? "트렌드"}
+          </span>
+        )}
       </div>
       <div className="w-[150px]"><QtyBox qty={qty} onDelta={changeQty} busy={busy} /></div>
       <div className="w-[110px]"><StatusPill status={PILL_BY_STATUS[status] ?? OUT} /></div>
-      <div className="flex flex-1 justify-end">
-        <button onClick={remove} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><Trash2 size={14} className="text-fg-muted" /></button>
+      <div className="flex flex-1 justify-end gap-1.5">
+        {editing ? (
+          <>
+            <button onClick={save} disabled={saving} className="flex h-8 items-center justify-center rounded-full bg-accent px-3 font-body text-[11px] font-bold text-fg-inverse disabled:opacity-50">{saving ? "저장 중…" : "저장"}</button>
+            <button onClick={() => setEditing(false)} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><X size={14} className="text-fg-muted" /></button>
+          </>
+        ) : (
+          <>
+            <button onClick={startEdit} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><Pencil size={13} className="text-fg-muted" /></button>
+            <button onClick={remove} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><Trash2 size={14} className="text-fg-muted" /></button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -562,16 +622,23 @@ function EventCard({ events }) {
 }
 
 /* ---------- Account footer ---------- */
-function AccountFooter({ onDeleteStore, onWithdraw }) {
+function AccountFooter({ onLogout, onDeleteStore, onWithdraw }) {
   return (
     <div className="flex items-center justify-between rounded-2xl bg-surface-primary px-7 py-5">
       <div className="flex flex-col gap-1">
         <span className="font-body text-sm font-bold text-fg-primary">계정 관리</span>
         <span className="font-body text-xs text-fg-muted">
-          더 이상 Foorendy를 사용하지 않으신다면 매장을 삭제하거나 계정을 탈퇴할 수 있어요.
+          로그아웃하거나, 더 이상 Foorendy를 사용하지 않으신다면 매장을 삭제하거나 계정을 탈퇴할 수 있어요.
         </span>
       </div>
       <div className="flex items-center gap-2.5">
+        <button
+          onClick={onLogout}
+          className="flex h-10 items-center gap-1.5 rounded-full border border-border-soft bg-surface-primary px-4 font-body text-[13px] font-bold text-fg-primary"
+        >
+          <LogOut size={14} className="text-fg-secondary" />
+          로그아웃
+        </button>
         <button
           onClick={onDeleteStore}
           className="flex h-10 items-center gap-1.5 rounded-full border border-[#E5484D] bg-surface-primary px-4 font-body text-[13px] font-bold text-[#E5484D]"
@@ -592,10 +659,12 @@ function AccountFooter({ onDeleteStore, onWithdraw }) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [trends, setTrends] = useState([]);
   const [store, setStore] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [summary, setSummary] = useState(null);
   const [series, setSeries] = useState(null);
   const [byTrend, setByTrend] = useState([]);
@@ -604,7 +673,18 @@ export default function Dashboard() {
   useEffect(() => {
     api.get("/trends?limit=100").then((d) => setTrends(d || [])).catch(() => setTrends([]));
     api.get("/stores/me").then((s) => setStore(s?.[0] ?? null)).catch(() => setStore(null));
+    api.get("/auth/me").then(setProfile).catch(() => setProfile(null)); // (2) 내 프로필
   }, []);
+
+  // (3) 로그아웃 — Supabase 세션 종료 후 로그인 화면으로
+  async function handleLogout() {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("[로그아웃]", e.message);
+    }
+    navigate("/login");
+  }
 
   const storeId = store?.store_id;
 
@@ -631,6 +711,9 @@ export default function Dashboard() {
                 <span className="font-body text-xs font-semibold text-fg-primary">{store?.name ?? "매장 불러오는 중…"}</span>
                 <ChevronDown size={12} className="text-fg-muted" />
               </span>
+              {profile?.email && (
+                <span className="font-body text-xs text-fg-muted">{profile.email}</span>
+              )}
             </div>
             <h1 className="font-heading text-[32px] font-bold text-fg-primary">안녕하세요, 사장님 👋</h1>
             <p className="font-body text-[13px] text-fg-secondary">
@@ -658,6 +741,7 @@ export default function Dashboard() {
 
           {/* account management */}
           <AccountFooter
+            onLogout={handleLogout}
             onDeleteStore={() => setDeleteOpen(true)}
             onWithdraw={() => setWithdrawOpen(true)}
           />

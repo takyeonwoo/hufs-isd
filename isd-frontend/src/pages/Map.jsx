@@ -4,6 +4,7 @@ import TopNav from "../components/TopNav.jsx";
 import StoreCard from "../components/StoreCard.jsx";
 import { loadNaverMaps } from "../lib/naverMap.js";
 import { api } from "../lib/api.js";
+import { logEvent } from "../lib/analytics.js";
 
 // 홍대입구역 일대 (시연용 기준 좌표)
 const MY_LOCATION = { lat: 37.5571, lng: 126.9245 };
@@ -232,7 +233,10 @@ function MapArea({ stores, detail, onSelect, onClose }) {
           map,
           icon: { content: markerHtml(markerOf(s)) },
         });
-        maps.Event.addListener(marker, "click", () => onSelect(s.store_id));
+        maps.Event.addListener(marker, "click", () => {
+          logEvent("CLICK_MARKER", { store_id: s.store_id }); // (28)
+          onSelect(s.store_id);
+        });
         markersRef.current.push(marker);
       });
   }, [stores, onSelect]);
@@ -297,7 +301,14 @@ export default function MapPage() {
   }, [activeId]);
 
   const select = useCallback((id) => {
+    logEvent("VIEW_STORE", { store_id: id }); // (28) 매장 상세 조회
     api.get(`/stores/${id}`).then(setDetail).catch(() => setDetail(null));
+  }, []);
+
+  // 트렌드 칩 선택 → 필터 변경 + 검색 이벤트
+  const pickTrend = useCallback((trendId) => {
+    logEvent("SEARCH_TREND", { trend_id: trendId }); // (28)
+    setActiveId(trendId);
   }, []);
 
   const activeTrend = trends.find((t) => t.trend_id === activeId);
@@ -306,7 +317,7 @@ export default function MapPage() {
     <div className="flex min-h-screen w-full justify-center bg-surface-secondary">
       <div className="flex w-full max-w-canvas flex-col bg-surface-secondary">
         <TopNav active="지도" />
-        <FilterBar trends={trends} activeId={activeId} onPick={setActiveId} />
+        <FilterBar trends={trends} activeId={activeId} onPick={pickTrend} />
         <div className="flex h-[820px] w-full">
           <Sidebar stores={stores} activeTrend={activeTrend} onSelect={select} />
           <MapArea stores={stores} detail={detail} onSelect={select} onClose={() => setDetail(null)} />
