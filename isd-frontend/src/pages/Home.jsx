@@ -1,58 +1,61 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Flame, ArrowRight } from "lucide-react";
 import TopNav from "../components/TopNav.jsx";
 import TrendCard from "../components/TrendCard.jsx";
 import StoreCard from "../components/StoreCard.jsx";
 import PrimaryButton from "../components/PrimaryButton.jsx";
+import { api } from "../lib/api.js";
 
 const HOT = { label: "HOT", color: "#FF3D3D", bg: "#FFE5E5", icon: "flame" };
 const RISING = { label: "RISING", color: "#F5A524", bg: "#FFF0DA", icon: "arrow-up-right" };
 const FALLING = { label: "FALLING", color: "#888888", bg: "#EEEEEE", icon: "arrow-down" };
+const HOT_BY_STATUS = { HOT, RISING, FALLING };
 const up = (label) => ({ label, color: "#22A06B", bg: "#E6F6EF", icon: "arrow-up" });
 const down = (label) => ({ label, color: "#888888", bg: "#F0F0F0", icon: "arrow-down" });
 const NEW = { label: "NEW", color: "#7C3AED", bg: "#EDE9FE", icon: "sparkles" };
+const FLAT = { label: "-", color: "#888888", bg: "#F0F0F0", icon: "arrow-down" };
 
-const trendCards = [
-  { rank: "1", emoji: "🟣", name: "우베", stores: "27 매장", score: "98.2", hot: HOT, delta: up("1") },
-  { rank: "2", emoji: "🍫", name: "두바이초콜릿", stores: "14 매장", score: "92.4", hot: HOT, delta: down("1") },
-  { rank: "3", emoji: "🍡", name: "두쫀쿠", stores: "9 매장", score: "87.6", hot: HOT, delta: up("2") },
-  { rank: "4", emoji: "🧈", name: "버터떡", stores: "22 매장", score: "81.0", hot: RISING, delta: up("3") },
-  { rank: "5", emoji: "🥐", name: "크루키", stores: "18 매장", score: "73.5", hot: FALLING, delta: down("2") },
-  { rank: "6", emoji: "🍰", name: "바스크치즈", stores: "31 매장", score: "68.9", hot: RISING, delta: up("2") },
-  { rank: "7", emoji: "🍵", name: "말차푸딩", stores: "12 매장", score: "64.1", hot: RISING, delta: down("1") },
-  { rank: "8", emoji: "🍩", name: "밤티라미수", stores: "7 매장", score: "58.7", hot: RISING, delta: up("1") },
-  { rank: "9", emoji: "🍡", name: "약과쿠키", stores: "25 매장", score: "54.3", hot: FALLING, delta: down("5") },
-  { rank: "10", emoji: "🍮", name: "흑임자라떼", stores: "11 매장", score: "51.2", hot: RISING, delta: NEW },
-];
+const STATUS_KO = { HOT: "급상승 인기", RISING: "상승세", FALLING: "하락세" };
+const EMOJI = {
+  "우베": "🟣", "애플망고": "🥭", "두바이쫀득쿠키": "🍫", "두바이초콜릿": "🍫", "버터떡": "🧈",
+  "초코바게트": "🥖", "말빵": "🍞", "황치즈": "🧀", "말차": "🍵", "크루키": "🥐", "약과쿠키": "🍪",
+};
+const emojiOf = (name) => EMOJI[name] || "🍪";
 
-const SOLD_LOW = { label: "소량", color: "#F5A524", bg: "#FFF3D8" };
-const SOLD_OUT = { label: "품절", color: "#888888", bg: "#F0F0F0" };
+const STOCK_PILL = {
+  AVAILABLE: { label: "판매중", color: "#22A06B", bg: "#E6F6EF" },
+  LOW: { label: "소량", color: "#F5A524", bg: "#FFF3D8" },
+  SOLD_OUT: { label: "품절", color: "#888888", bg: "#F0F0F0" },
+};
 
-const nearby = [
-  { emoji: "🟣", name: "연남 우베하우스", desc: "우베 케이크 · 6,800원", distance: "0.4 km", time: "10분 전 업데이트" },
-  { emoji: "🍫", name: "두바이초콜릿 팩토리", desc: "두바이초콜릿 · 9,500원", distance: "0.7 km", time: "3분 전 업데이트", stock: SOLD_LOW },
-  { emoji: "🍡", name: "망원 두쫀쿠", desc: "두쫀쿠 4개입 · 12,000원", distance: "1.2 km", time: "방금 업데이트" },
-  { emoji: "🟣", name: "성수 우베 라떼바", desc: "우베 라떼 · 5,500원", distance: "0.9 km", time: "22분 전 업데이트" },
-  { emoji: "🍰", name: "합정 디저트연구소", desc: "우베 카눌레 · 3,800원", distance: "1.1 km", time: "품절", stock: SOLD_OUT },
-  { emoji: "🍫", name: "홍대 초콜릿하우스", desc: "두바이초콜릿 미니 · 6,000원", distance: "1.4 km", time: "35분 전 업데이트" },
-];
+const MY_LOCATION = { lat: 37.5571, lng: 126.9245 };
 
-const searchRank = [
-  { n: "1", name: "우베", delta: "▲ 1", up: true },
-  { n: "2", name: "두바이초콜릿", delta: "▼ 1", up: false },
-  { n: "3", name: "두쫀쿠", delta: "▲ 2", up: true },
-  { n: "4", name: "버터떡", delta: "▲ 3", up: true },
-  { n: "5", name: "크루키", delta: "▼ 2", up: false },
-];
+function timeAgo(iso) {
+  if (!iso) return "";
+  const sec = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (sec < 60) return "방금 업데이트";
+  if (sec < 3600) return `${Math.floor(sec / 60)}분 전 업데이트`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}시간 전 업데이트`;
+  return `${Math.floor(sec / 86400)}일 전 업데이트`;
+}
 
-function Hero() {
+function rankDelta(t) {
+  if (t.previous_rank == null) return NEW;
+  const d = t.previous_rank - t.rank; // 양수 = 순위 상승
+  if (d > 0) return up(String(d));
+  if (d < 0) return down(String(-d));
+  return FLAT;
+}
+
+function Hero({ searchRank }) {
   return (
     <section className="flex gap-8 rounded-2xl bg-surface-inverse p-12">
       <div className="flex flex-1 flex-col gap-6">
         <span className="inline-flex w-fit items-center gap-2 rounded-full bg-[#1F1F1F] px-3.5 py-1.5">
           <span className="h-1.5 w-1.5 rounded-full bg-accent" />
           <span className="font-body text-[11px] font-semibold text-fg-inverse">
-            LIVE TREND · 2026.05.26 14:00 업데이트
+            LIVE TREND · 매시간 랭킹 갱신
           </span>
         </span>
         <h1 className="whitespace-pre-line font-heading text-5xl font-bold leading-[1.15] text-fg-inverse">
@@ -76,20 +79,17 @@ function Hero() {
       <div className="flex h-[244px] w-[380px] flex-col justify-between gap-3.5 rounded-2xl bg-[#1F1F1F] p-6">
         <div className="flex w-full items-center justify-between">
           <span className="font-body text-xs font-semibold text-[#B0B0B0]">실시간 인기 검색어</span>
-          <span className="font-data text-[11px] text-fg-muted">↻ 5초 전</span>
+          <span className="font-data text-[11px] text-fg-muted">↻ 실시간</span>
         </div>
         <div className="flex flex-col gap-2">
+          {searchRank.length === 0 && <span className="font-body text-xs text-fg-muted">집계 중…</span>}
           {searchRank.map((r) => (
             <div key={r.n} className="flex w-full items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <span className={"font-data text-sm font-bold " + (r.n === "1" ? "text-accent" : "text-[#B0B0B0]")}>
-                  {r.n}
-                </span>
+                <span className={"font-data text-sm font-bold " + (r.n === 1 ? "text-accent" : "text-[#B0B0B0]")}>{r.n}</span>
                 <span className="font-body text-sm font-semibold text-fg-inverse">{r.name}</span>
               </div>
-              <span className={"font-data text-xs font-bold " + (r.up ? "text-status-available" : "text-[#B0B0B0]")}>
-                {r.delta}
-              </span>
+              <span className={"font-data text-xs font-bold " + (r.up ? "text-status-available" : "text-[#B0B0B0]")}>{r.delta}</span>
             </div>
           ))}
         </div>
@@ -133,12 +133,42 @@ function Footer() {
 }
 
 export default function Home() {
+  const [trends, setTrends] = useState([]);
+  const [nearby, setNearby] = useState([]);
+  const [searchRank, setSearchRank] = useState([]);
+
+  useEffect(() => {
+    api.get("/trends?limit=10")
+      .then((d) => {
+        const list = d || [];
+        setTrends(list);
+        // 인기 검색어: Redis 기반 search-ranking 우선, 비면 트렌드 순위 변동으로 폴백
+        api.get("/trends/search-ranking")
+          .then((sr) => {
+            if (sr?.length) {
+              setSearchRank(sr.map((r) => ({ n: r.rank, name: r.name, delta: r.direction === "up" ? `▲ ${r.delta}` : `▼ ${Math.abs(r.delta)}`, up: r.direction === "up" })));
+            } else {
+              setSearchRank(list.slice(0, 5).map((t) => {
+                const d = t.previous_rank == null ? 0 : t.previous_rank - t.rank;
+                return { n: t.rank, name: t.name, delta: d > 0 ? `▲ ${d}` : d < 0 ? `▼ ${-d}` : "-", up: d > 0 };
+              }));
+            }
+          })
+          .catch(() => setSearchRank([]));
+      })
+      .catch(() => setTrends([]));
+
+    api.get(`/stores?lat=${MY_LOCATION.lat}&lng=${MY_LOCATION.lng}&radius=5`)
+      .then((d) => setNearby((d || []).slice(0, 6)))
+      .catch(() => setNearby([]));
+  }, []);
+
   return (
     <div className="flex min-h-screen w-full justify-center bg-surface-secondary">
       <div className="w-full max-w-canvas bg-surface-secondary">
         <TopNav active="트렌드" />
         <main className="flex flex-col gap-8 px-10 pb-10 pt-6">
-          <Hero />
+          <Hero searchRank={searchRank} />
 
           <section className="flex flex-col gap-7 rounded-2xl bg-surface-primary p-10">
             <div className="flex flex-col gap-1.5">
@@ -148,8 +178,17 @@ export default function Home() {
               </p>
             </div>
             <div className="grid grid-cols-5 gap-5">
-              {trendCards.map((c) => (
-                <TrendCard key={c.rank} {...c} />
+              {trends.map((t) => (
+                <TrendCard
+                  key={t.trend_id}
+                  rank={String(t.rank)}
+                  emoji={emojiOf(t.name)}
+                  name={t.name}
+                  stores={STATUS_KO[t.status] ?? ""}
+                  score={t.trend_score != null ? String(t.trend_score) : "-"}
+                  hot={HOT_BY_STATUS[t.status] ?? HOT}
+                  delta={rankDelta(t)}
+                />
               ))}
             </div>
           </section>
@@ -162,8 +201,17 @@ export default function Home() {
               </Link>
             </div>
             <div className="grid grid-cols-3 gap-3.5">
+              {nearby.length === 0 && <span className="font-body text-xs text-fg-muted">주변 매장을 불러오는 중…</span>}
               {nearby.map((s) => (
-                <StoreCard key={s.name} {...s} />
+                <StoreCard
+                  key={s.store_id}
+                  emoji={emojiOf(s.trend?.name)}
+                  name={s.name}
+                  desc={s.featured_product ? `${s.featured_product.name} · ${Number(s.featured_product.price ?? 0).toLocaleString()}원` : "등록된 메뉴 없음"}
+                  distance={s.distance_km != null ? `${s.distance_km} km` : ""}
+                  time={timeAgo(s.featured_product?.stock_updated_at)}
+                  stock={STOCK_PILL[s.featured_product?.stock_status] ?? STOCK_PILL.AVAILABLE}
+                />
               ))}
             </div>
           </section>
