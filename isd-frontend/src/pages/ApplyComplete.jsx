@@ -1,21 +1,63 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, ArrowRight } from "lucide-react";
 import TopNav from "../components/TopNav.jsx";
+import { api } from "../lib/api.js";
 
-const meta = [
+const metaFallback = [
   { label: "신청 번호", value: "FOO-2026-002841", mono: true },
   { label: "카페 이름", value: "연남 우베하우스" },
-  { label: "이메일", value: "wooyeont@gmail.com", mono: true },
+  { label: "상태", value: "심사 대기" },
   { label: "접수 일시", value: "2026.05.26 14:32", mono: true },
 ];
 
-const steps = [
-  { n: "1", text: "심사 (영업일 기준 2~3일)", state: "active" },
-  { n: "2", text: "승인 후 입점비 결제 안내 (이메일)", state: "next" },
-  { n: "3", text: "매장 정보 등록 후 대시보드 사용 시작", state: "todo" },
-];
+const STATUS_LABEL = { PENDING: "심사 대기", APPROVED: "승인 완료", REJECTED: "반려" };
+
+function appNo(id) {
+  return id != null ? `FOO-${String(id).padStart(6, "0")}` : "—";
+}
+function fmtDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// 신청 상태 → 진행 단계 활성 인덱스
+function stepStates(status) {
+  const labels = [
+    "심사 (영업일 기준 2~3일)",
+    "승인 후 입점비 결제 안내 (이메일)",
+    "매장 정보 등록 후 대시보드 사용 시작",
+  ];
+  const active = status === "APPROVED" ? 2 : status === "REJECTED" ? -1 : 0;
+  return labels.map((text, i) => ({
+    n: String(i + 1),
+    text,
+    state: i < active ? "done" : i === active ? "active" : i === active + 1 ? "next" : "todo",
+  }));
+}
 
 export default function ApplyComplete() {
+  // (22) 내 신청 현황 — 가장 최근 신청 1건
+  const [app, setApp] = useState(null);
+  useEffect(() => {
+    api.get("/applications/me")
+      .then((list) => setApp(Array.isArray(list) && list.length ? list[0] : null))
+      .catch(() => setApp(null));
+  }, []);
+
+  const meta = app
+    ? [
+        { label: "신청 번호", value: appNo(app.application_id ?? app.id), mono: true },
+        { label: "카페 이름", value: app.cafe_name ?? "—" },
+        { label: "상태", value: STATUS_LABEL[app.status] ?? app.status ?? "—" },
+        { label: "접수 일시", value: fmtDateTime(app.submitted_at), mono: true },
+      ]
+    : metaFallback;
+  const steps = stepStates(app?.status);
+
   return (
     <div className="flex min-h-screen w-full justify-center bg-surface-secondary">
       <div className="flex w-full max-w-canvas flex-col bg-surface-secondary">
