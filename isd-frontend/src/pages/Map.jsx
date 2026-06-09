@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { MapPin, ChevronDown, List, Map as MapIcon, Info, Plus, Minus, LocateFixed, Timer, X } from "lucide-react";
+import { MapPin, List, Map as MapIcon, Info, Plus, Minus, LocateFixed, Timer, X } from "lucide-react";
 import TopNav from "../components/TopNav.jsx";
 import StoreCard from "../components/StoreCard.jsx";
 import { loadNaverMaps } from "../lib/naverMap.js";
@@ -90,7 +90,7 @@ function FilterBar({ trends, activeId, onPick }) {
   );
 }
 
-function Sidebar({ stores, activeTrend, onSelect }) {
+function Sidebar({ stores, activeTrend, onSelect, sort, onSort, viewMode, onViewMode }) {
   return (
     <aside className="flex w-[440px] shrink-0 flex-col gap-[18px] overflow-y-auto bg-surface-primary p-6">
       <div className="flex flex-col gap-1.5">
@@ -107,17 +107,33 @@ function Sidebar({ stores, activeTrend, onSelect }) {
         </div>
       </div>
       <div className="flex w-full items-center justify-between">
+        {/* (12) 정렬: 거리순 / 가격순 */}
         <span className="flex h-8 items-center gap-1.5 rounded-full bg-surface-secondary px-3">
-          <span className="font-body text-xs font-semibold text-fg-primary">거리순</span>
-          <ChevronDown size={12} className="text-fg-primary" />
+          <select
+            value={sort}
+            onChange={(e) => onSort(e.target.value)}
+            className="bg-transparent font-body text-xs font-semibold text-fg-primary outline-none"
+          >
+            <option value="distance">거리순</option>
+            <option value="price">가격순</option>
+          </select>
         </span>
+        {/* (13) 리스트 / 지도 전용 보기 토글 */}
         <div className="flex h-8 items-center gap-1 rounded-full bg-surface-secondary p-[3px]">
-          <span className="flex h-[26px] w-8 items-center justify-center rounded-full bg-surface-primary shadow-sm">
-            <List size={14} className="text-fg-primary" />
-          </span>
-          <span className="flex h-[26px] w-8 items-center justify-center">
-            <MapIcon size={14} className="text-fg-muted" />
-          </span>
+          <button
+            onClick={() => onViewMode("list")}
+            title="목록 + 지도"
+            className={"flex h-[26px] w-8 items-center justify-center rounded-full " + (viewMode === "list" ? "bg-surface-primary shadow-sm" : "")}
+          >
+            <List size={14} className={viewMode === "list" ? "text-fg-primary" : "text-fg-muted"} />
+          </button>
+          <button
+            onClick={() => onViewMode("map")}
+            title="지도 전체 보기"
+            className={"flex h-[26px] w-8 items-center justify-center rounded-full " + (viewMode === "map" ? "bg-surface-primary shadow-sm" : "")}
+          >
+            <MapIcon size={14} className={viewMode === "map" ? "text-fg-primary" : "text-fg-muted"} />
+          </button>
         </div>
       </div>
       <div className="flex flex-col gap-2.5">
@@ -181,7 +197,7 @@ function StorePopover({ detail, onClose }) {
   );
 }
 
-function MapArea({ stores, detail, onSelect, onClose }) {
+function MapArea({ stores, detail, onSelect, onClose, viewMode, onViewMode }) {
   const mapEl = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -252,11 +268,23 @@ function MapArea({ stores, detail, onSelect, onClose }) {
     <div className="relative flex-1 overflow-hidden bg-[#E8EDF0]">
       <div ref={mapEl} className="absolute inset-0 h-full w-full" />
 
-      <div className="pointer-events-none absolute left-6 top-6 z-10 flex items-center gap-2.5 rounded-full bg-surface-primary px-4 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.09)]">
-        <Info size={14} className="text-accent" />
-        <span className="font-body text-xs font-medium text-fg-primary">
-          마커를 클릭하면 매장 상세가 열립니다
-        </span>
+      <div className="absolute left-6 top-6 z-10 flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 rounded-full bg-surface-primary px-4 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.09)]">
+          <Info size={14} className="text-accent" />
+          <span className="font-body text-xs font-medium text-fg-primary">
+            마커를 클릭하면 매장 상세가 열립니다
+          </span>
+        </div>
+        {/* (13) 지도 전체 보기 상태에서 목록으로 복귀 */}
+        {viewMode === "map" && (
+          <button
+            onClick={() => onViewMode("list")}
+            className="flex items-center gap-1.5 rounded-full bg-surface-primary px-4 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.09)]"
+          >
+            <List size={14} className="text-accent" />
+            <span className="font-body text-xs font-semibold text-fg-primary">목록 보기</span>
+          </button>
+        )}
       </div>
 
       <button
@@ -287,6 +315,8 @@ export default function MapPage() {
   const [activeId, setActiveId] = useState(null);
   const [stores, setStores] = useState([]);
   const [detail, setDetail] = useState(null);
+  const [sort, setSort] = useState("distance"); // (12) 거리순 / 가격순
+  const [viewMode, setViewMode] = useState("list"); // (13) 목록+지도 / 지도전체
 
   useEffect(() => {
     api.get("/trends?limit=10")
@@ -326,14 +356,39 @@ export default function MapPage() {
 
   const activeTrend = trends.find((t) => t.trend_id === activeId);
 
+  // (12) 정렬: 거리순(distance_km 오름차순) / 가격순(대표상품 가격 오름차순)
+  const sortedStores = [...stores].sort((a, b) => {
+    if (sort === "price") {
+      return (a.featured_product?.price ?? Infinity) - (b.featured_product?.price ?? Infinity);
+    }
+    return (a.distance_km ?? Infinity) - (b.distance_km ?? Infinity);
+  });
+
   return (
     <div className="flex min-h-screen w-full justify-center bg-surface-secondary">
       <div className="flex w-full max-w-canvas flex-col bg-surface-secondary">
         <TopNav active="지도" />
         <FilterBar trends={trends} activeId={activeId} onPick={pickTrend} />
         <div className="flex h-[820px] w-full">
-          <Sidebar stores={stores} activeTrend={activeTrend} onSelect={select} />
-          <MapArea stores={stores} detail={detail} onSelect={select} onClose={() => setDetail(null)} />
+          {viewMode === "list" && (
+            <Sidebar
+              stores={sortedStores}
+              activeTrend={activeTrend}
+              onSelect={select}
+              sort={sort}
+              onSort={setSort}
+              viewMode={viewMode}
+              onViewMode={setViewMode}
+            />
+          )}
+          <MapArea
+            stores={sortedStores}
+            detail={detail}
+            onSelect={select}
+            onClose={() => setDetail(null)}
+            viewMode={viewMode}
+            onViewMode={setViewMode}
+          />
         </div>
       </div>
     </div>

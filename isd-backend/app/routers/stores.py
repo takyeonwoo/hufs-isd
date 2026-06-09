@@ -56,18 +56,25 @@ async def list_stores(
     )
     trends = {t["trend_id"]: t for t in (db.table("trends").select("trend_id, name").execute().data or [])}
 
-    # 매장별 대표 상품(가장 오래된 = 시그니처) 매핑
-    featured: dict[int, dict] = {}
+    # 매장별 상품 목록(생성순). 대표 상품 = 가장 오래된 시그니처.
+    by_store: dict[int, list[dict]] = {}
     for p in products:
-        featured.setdefault(p["store_id"], p)
+        by_store.setdefault(p["store_id"], []).append(p)
 
     status_filter = {s.strip() for s in stock_status.split(",")} if stock_status else None
 
     items = []
     for s in stores:
-        fp = featured.get(s["store_id"])
-        if trend_id is not None and not (fp and fp.get("trend_id") == trend_id):
-            continue
+        store_products = by_store.get(s["store_id"], [])
+        # trend_id 필터: 대표상품만이 아니라 "이 매장의 어느 상품이든" 해당 트렌드를 팔면 포함.
+        # featured_product 는 매칭되는 상품(가장 오래된)으로 바꿔 그 트렌드의 재고/가격이 보이게 한다.
+        if trend_id is not None:
+            matched = [p for p in store_products if p.get("trend_id") == trend_id]
+            if not matched:
+                continue
+            fp = matched[0]
+        else:
+            fp = store_products[0] if store_products else None
         if status_filter and not (fp and fp.get("stock_status") in status_filter):
             continue
 

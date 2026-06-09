@@ -1,9 +1,9 @@
 # Foorendy Backend (isd-backend)
 
-FastAPI · PostgreSQL(Supabase) · Redis · APScheduler
+FastAPI · PostgreSQL(Supabase)
 
-[API_SPEC.md](../../API_SPEC.md) 의 32개 엔드포인트를 리소스별 라우터로 구현하는 스캐폴드입니다.
-현재 각 핸들러는 요청 검증 + 응답 봉투 형태까지 갖춰져 있고, 실제 DB 연동 지점은 `# TODO` 로 표시돼 있습니다.
+[docs/API_SPEC.md](../docs/API_SPEC.md) 의 35개 엔드포인트를 리소스별 라우터로 구현한다.
+모든 핸들러가 Supabase 와 실제 연동되어 동작한다(목록·생성·수정·삭제·집계, 재고 자동화, 입점 승인→매장 생성, 분석 집계).
 
 ## 빠른 시작
 
@@ -35,21 +35,21 @@ app/
 │   └── responses.py     # 공통 응답 봉투 · ApiError · 페이지네이션
 ├── schemas/             # Pydantic 요청 모델 + enum
 └── routers/             # 리소스별 라우터
-    ├── auth.py          # §3  (1~3)
-    ├── trends.py        # §4  (4~6)
-    ├── stores.py        # §5  (7~10)
-    ├── products.py      # §6  (11~16) · 재고
-    ├── notices.py       # §7  (17~20)
-    ├── applications.py  # §8  (21~26)
-    ├── uploads.py       # §8  (27)
-    ├── analytics.py     # §9  (28~31)
-    └── admin.py         # §9  (32)
+    ├── auth.py          # §3  내 프로필 · 회원 탈퇴(34)
+    ├── trends.py        # §4  랭킹(4) · 상세(5) · 인기검색어 집계(6)
+    ├── stores.py        # §5  목록/상세/내매장/수정/삭제(7~10,35)
+    ├── products.py      # §6  목록/등록/수정/재고변경/삭제/이력(11~16) · 재고 자동화
+    ├── notices.py       # §7  공지 CRUD(17~20)
+    ├── applications.py  # §8  신청/현황/심사/승인→매장생성/반려(21~26)
+    ├── uploads.py       # §8  사업자등록증(27) · 상품 이미지(33)
+    ├── analytics.py     # §9  이벤트 수집/KPI/시계열/로그(28~31)
+    └── admin.py         # §9  심사 KPI(32)
 ```
 
-## 다음 단계 (구현 TODO)
+## 구현 특징
 
-- 각 라우터의 `# TODO` 지점에 Supabase 쿼리 연결
-- 재고 변경 시 `inventory_logs` 자동 기록 트랜잭션
-- 입점 승인 시 `stores` 생성 단일 트랜잭션
-- Redis 인기 검색어 집계 + APScheduler 트렌드 점수 배치
-- Supabase Storage 연동(사업자등록증 업로드)
+- **재고 자동화**: 수량 변경 시 `inventory_logs` 자동 기록 + `stock_status`/`stock_updated_at` 갱신
+- **입점 승인**: 승인 시 `stores` 자동 생성 후 신청서 상태 갱신
+- **인기 검색어**: `analytics_logs`의 `SEARCH_TREND` 이벤트를 윈도우별 DB 집계 (Redis 불필요)
+- **업로드**: Supabase Storage 공개 버킷(`business-licenses`, `product-images`)
+- **인증**: 로그인/로그아웃은 클라이언트 Supabase SDK, 회원 탈퇴는 service-role 백엔드(`DELETE /auth/me`)

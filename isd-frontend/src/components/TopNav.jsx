@@ -1,4 +1,4 @@
-import { Flame, Search } from "lucide-react";
+import { Flame } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const links = [
@@ -42,14 +42,6 @@ export default function TopNav({ active = "트렌드" }) {
             );
           })}
         </nav>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-[260px] items-center gap-2 rounded-full bg-surface-secondary px-4">
-          <Search size={16} className="text-fg-muted" />
-          <span className="font-body text-[13px] text-fg-muted">
-            음식이나 매장 검색
-          </span>
-        </div>
       </div>
     </header>
   );

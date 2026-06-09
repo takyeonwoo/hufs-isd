@@ -84,12 +84,29 @@ const LOW = { label: "품절임박", color: "#F5A524", bg: "#FFF3D8" };
 const OUT = { label: "품절", color: "#888888", bg: "#F7F8FA" };
 const PILL_BY_STATUS = { AVAILABLE: AVAIL, LOW, SOLD_OUT: OUT };
 
-function QtyBox({ qty, onDelta, busy }) {
+function QtyBox({ qty, onDelta, onSet, busy }) {
   const bg = qty <= 0 ? "#F7F8FA" : qty <= 5 ? "#FFF3D8" : "#F7F8FA";
+  const [text, setText] = useState(String(qty));
+  // 외부(±버튼 등)에서 qty 가 바뀌면 입력칸도 동기화
+  useEffect(() => { setText(String(qty)); }, [qty]);
+
+  const commit = () => {
+    const v = parseInt(text, 10);
+    if (Number.isNaN(v) || v === qty) { setText(String(qty)); return; }
+    onSet?.(Math.max(0, v));
+  };
+
   return (
     <span className="inline-flex h-8 items-center gap-1 rounded-full px-1" style={{ backgroundColor: bg }}>
       <button disabled={busy} onClick={() => onDelta?.(-1)} className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-primary disabled:opacity-40"><Minus size={12} className="text-fg-secondary" /></button>
-      <span className="w-7 text-center font-data text-xs font-bold text-fg-primary">{qty}</span>
+      <input
+        value={text}
+        disabled={busy}
+        onChange={(e) => setText(e.target.value.replace(/[^0-9]/g, ""))}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+        className="w-9 bg-transparent text-center font-data text-xs font-bold text-fg-primary outline-none"
+      />
       <button disabled={busy} onClick={() => onDelta?.(1)} className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-primary disabled:opacity-40"><Plus size={12} className="text-fg-secondary" /></button>
     </span>
   );
@@ -114,10 +131,10 @@ function ProductRow({ p, trends, onChanged, onDeleted }) {
   const [draft, setDraft] = useState(cur);
   const [saving, setSaving] = useState(false);
 
-  const changeQty = async (delta) => {
+  const applyQty = async (body) => {
     setBusy(true);
     try {
-      const res = await api.patch(`/products/${p.product_id}/quantity`, { delta });
+      const res = await api.patch(`/products/${p.product_id}/quantity`, body);
       setQty(res.quantity);
       setStatus(res.stock_status);
       onChanged?.(p.product_id);
@@ -127,6 +144,8 @@ function ProductRow({ p, trends, onChanged, onDeleted }) {
       setBusy(false);
     }
   };
+  const changeQty = (delta) => applyQty({ delta });
+  const setQtyAbs = (quantity) => applyQty({ quantity });
 
   const remove = async () => {
     if (!confirm(`'${cur.name}' 메뉴를 삭제할까요?`)) return;
@@ -195,7 +214,7 @@ function ProductRow({ p, trends, onChanged, onDeleted }) {
           </span>
         )}
       </div>
-      <div className="w-[150px]"><QtyBox qty={qty} onDelta={changeQty} busy={busy} /></div>
+      <div className="w-[150px]"><QtyBox qty={qty} onDelta={changeQty} onSet={setQtyAbs} busy={busy} /></div>
       <div className="w-[110px]"><StatusPill status={PILL_BY_STATUS[status] ?? OUT} /></div>
       <div className="flex flex-1 justify-end gap-1.5">
         {editing ? (
@@ -569,7 +588,29 @@ function NoticeCard({ storeId }) {
 }
 
 /* ---------- Right column ---------- */
-function ChartCard({ series }) {
+const RANGE_OPTIONS = [
+  { value: "1d", label: "오늘" },
+  { value: "7d", label: "최근 7일" },
+  { value: "30d", label: "최근 30일" },
+];
+const rangeLabel = (r) => RANGE_OPTIONS.find((o) => o.value === r)?.label ?? r;
+
+function RangeSelect({ range, onRange }) {
+  return (
+    <span className="flex h-8 items-center gap-1.5 rounded-full bg-surface-secondary px-3">
+      <Calendar size={12} className="text-fg-primary" />
+      <select
+        value={range}
+        onChange={(e) => onRange(e.target.value)}
+        className="bg-transparent font-body text-xs font-semibold text-fg-primary outline-none"
+      >
+        {RANGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </span>
+  );
+}
+
+function ChartCard({ series, range, onRange }) {
   const buckets = series?.buckets || [];
   const max = Math.max(1, ...buckets.map((b) => b.views));
   const peakHour = series?.peak?.from;
@@ -579,15 +620,11 @@ function ChartCard({ series }) {
         <div className="flex flex-col gap-1">
           <h3 className="font-heading text-base font-bold text-fg-primary">시간대별 매장 조회</h3>
           <p className="font-body text-[11px] text-fg-muted">
-            {`최근 ${series?.range ?? "7d"} ${won(series?.total ?? 0)}회`}
+            {`${rangeLabel(range)} ${won(series?.total ?? 0)}회`}
             {series?.peak ? ` · 피크 ${series.peak.from} ~ ${series.peak.to}` : ""}
           </p>
         </div>
-        <span className="flex h-8 items-center gap-1.5 rounded-full bg-surface-secondary px-3">
-          <Calendar size={12} className="text-fg-primary" />
-          <span className="font-body text-xs font-semibold text-fg-primary">최근 7일</span>
-          <ChevronDown size={12} className="text-fg-muted" />
-        </span>
+        <RangeSelect range={range} onRange={onRange} />
       </div>
       <div className="flex h-[180px] w-full items-end gap-1.5">
         {buckets.length === 0 && <span className="m-auto font-body text-xs text-fg-muted">조회 데이터가 없습니다.</span>}
@@ -605,16 +642,12 @@ function ChartCard({ series }) {
   );
 }
 
-function TopProdCard({ items }) {
+function TopProdCard({ items, range, onRange }) {
   return (
     <div className="flex flex-col gap-4 rounded-2xl bg-surface-primary p-6">
       <div className="flex w-full items-center justify-between">
         <h3 className="font-heading text-base font-bold text-fg-primary">트렌드별 조회수</h3>
-        <span className="flex h-8 items-center gap-1.5 rounded-full bg-surface-secondary px-3">
-          <Calendar size={12} className="text-fg-primary" />
-          <span className="font-body text-xs font-semibold text-fg-primary">최근 7일</span>
-          <ChevronDown size={12} className="text-fg-muted" />
-        </span>
+        <RangeSelect range={range} onRange={onRange} />
       </div>
       {(!items || items.length === 0) && <span className="font-body text-xs text-fg-muted">조회 데이터가 없습니다.</span>}
       {(items || []).map((p) => (
@@ -770,9 +803,14 @@ export default function Dashboard() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [storeEditOpen, setStoreEditOpen] = useState(false);
+  const [storeMenuOpen, setStoreMenuOpen] = useState(false); // (6) 매장 전환 드롭다운
   const [trends, setTrends] = useState([]);
-  const [store, setStore] = useState(null);
+  const [stores, setStores] = useState([]);   // (6) 내 매장 전체
+  const [store, setStore] = useState(null);    // 현재 선택된 매장
   const [profile, setProfile] = useState(null);
+  const [userName, setUserName] = useState(""); // (7) 인사말용 이름
+  const [storeStats, setStoreStats] = useState({ menus: 0, notices: 0 }); // (11) 삭제 모달용
+  const [range, setRange] = useState("7d");    // (10) 조회 기간
   const [summary, setSummary] = useState(null);
   const [series, setSeries] = useState(null);
   const [byTrend, setByTrend] = useState([]);
@@ -780,8 +818,16 @@ export default function Dashboard() {
 
   useEffect(() => {
     api.get("/trends?limit=100").then((d) => setTrends(d || [])).catch(() => setTrends([]));
-    api.get("/stores/me").then((s) => setStore(s?.[0] ?? null)).catch(() => setStore(null));
+    api.get("/stores/me").then((s) => { setStores(s || []); setStore(s?.[0] ?? null); }).catch(() => { setStores([]); setStore(null); });
     api.get("/auth/me").then(setProfile).catch(() => setProfile(null)); // (2) 내 프로필
+    // (7) 인사말 이름: Supabase 세션의 user_metadata 우선, 없으면 이메일 앞부분
+    supabase.auth.getUser()
+      .then(({ data }) => {
+        const u = data?.user;
+        const meta = u?.user_metadata || {};
+        setUserName(meta.full_name || meta.name || (u?.email ? u.email.split("@")[0] : ""));
+      })
+      .catch(() => setUserName(""));
   }, []);
 
   // (3) 로그아웃 — Supabase 세션 종료 후 로그인 화면으로
@@ -799,10 +845,18 @@ export default function Dashboard() {
   useEffect(() => {
     if (!storeId) return;
     api.get(`/stores/${storeId}/analytics/summary`).then(setSummary).catch(() => setSummary(null));
-    api.get(`/stores/${storeId}/analytics/timeseries?metric=views`).then(setSeries).catch(() => setSeries(null));
-    api.get(`/stores/${storeId}/analytics/timeseries?metric=by_trend`).then((d) => setByTrend(d || [])).catch(() => setByTrend([]));
     api.get(`/stores/${storeId}/analytics/events`).then((d) => setEvents(d || [])).catch(() => setEvents([]));
+    // (11) 삭제 모달용 메뉴/공지 수
+    api.get(`/stores/${storeId}/products`).then((d) => setStoreStats((st) => ({ ...st, menus: (d || []).length }))).catch(() => {});
+    api.get(`/stores/${storeId}/notices?status=PUBLISHED`).then((d) => setStoreStats((st) => ({ ...st, notices: (d || []).length }))).catch(() => {});
   }, [storeId]);
+
+  // (10) 조회 기간(range) 바뀌면 시계열만 다시 조회
+  useEffect(() => {
+    if (!storeId) return;
+    api.get(`/stores/${storeId}/analytics/timeseries?metric=views&range=${range}`).then(setSeries).catch(() => setSeries(null));
+    api.get(`/stores/${storeId}/analytics/timeseries?metric=by_trend&range=${range}`).then((d) => setByTrend(d || [])).catch(() => setByTrend([]));
+  }, [storeId, range]);
 
   const kpis = buildKpis(summary);
 
@@ -815,10 +869,30 @@ export default function Dashboard() {
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2.5">
               <span className="font-body text-xs font-bold text-accent">사장님 대시보드</span>
-              <span className="flex h-7 items-center gap-1.5 rounded-full border border-border-soft bg-surface-primary px-3">
-                <span className="font-body text-xs font-semibold text-fg-primary">{store?.name ?? "매장 불러오는 중…"}</span>
-                <ChevronDown size={12} className="text-fg-muted" />
-              </span>
+              {/* (6) 매장 전환 드롭다운 — 같은 사장님의 다른 매장으로 전환 */}
+              <div className="relative">
+                <button
+                  onClick={() => setStoreMenuOpen((v) => !v)}
+                  className="flex h-7 items-center gap-1.5 rounded-full border border-border-soft bg-surface-primary px-3"
+                >
+                  <span className="font-body text-xs font-semibold text-fg-primary">{store?.name ?? "매장 불러오는 중…"}</span>
+                  <ChevronDown size={12} className="text-fg-muted" />
+                </button>
+                {storeMenuOpen && stores.length > 0 && (
+                  <div className="absolute left-0 top-8 z-20 flex w-56 flex-col rounded-xl border border-border-soft bg-surface-primary py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                    {stores.map((s) => (
+                      <button
+                        key={s.store_id}
+                        onClick={() => { setStore(s); setStoreMenuOpen(false); setStoreEditOpen(false); }}
+                        className={"flex items-center justify-between px-3.5 py-2 text-left font-body text-xs hover:bg-surface-secondary " + (s.store_id === storeId ? "font-bold text-accent" : "font-medium text-fg-primary")}
+                      >
+                        <span className="truncate">{s.name}</span>
+                        {s.store_id === storeId && <Check size={12} className="text-accent" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {profile?.email && (
                 <span className="font-body text-xs text-fg-muted">{profile.email}</span>
               )}
@@ -829,7 +903,7 @@ export default function Dashboard() {
                 <Pencil size={11} className="text-fg-muted" /> 정보 수정
               </button>
             </div>
-            <h1 className="font-heading text-[32px] font-bold text-fg-primary">안녕하세요, 사장님 👋</h1>
+            <h1 className="font-heading text-[32px] font-bold text-fg-primary">안녕하세요, {userName ? `${userName} ` : ""}사장님 👋</h1>
             <p className="font-body text-[13px] text-fg-secondary">
               오늘 {summary?.stock_changes_today ?? 0}건의 재고 변경과 {won(summary?.store_views_today ?? 0)}회 매장 조회가 있었어요.
             </p>
@@ -857,8 +931,8 @@ export default function Dashboard() {
               <NoticeCard storeId={storeId} />
             </div>
             <div className="flex w-[480px] flex-col gap-5">
-              <ChartCard series={series} />
-              <TopProdCard items={byTrend} />
+              <ChartCard series={series} range={range} onRange={setRange} />
+              <TopProdCard items={byTrend} range={range} onRange={setRange} />
               <EventCard events={events} />
             </div>
           </div>
@@ -875,6 +949,11 @@ export default function Dashboard() {
       <DeleteStoreModal
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
+        store={store ? {
+          name: store.name,
+          emoji: "🟣",
+          summary: `메뉴 ${storeStats.menus}개 · 공지 ${storeStats.notices}건${store.address ? ` · ${store.address.split(" ").slice(0, 2).join(" ")}` : ""}`,
+        } : undefined}
         onConfirm={async () => {
           if (!storeId) return alert("불러온 매장이 없습니다.");
           try {
