@@ -7,7 +7,6 @@ import { api } from "../lib/api.js";
 const socials = [
   { provider: "google", label: "Google로 로그인", bg: "#FFFFFF", color: "#1A1A1A", border: true, badge: <span className="font-heading text-lg font-bold text-[#4285F4]">G</span> },
   { provider: "kakao", label: "Kakao로 로그인", bg: "#FEE500", color: "#1A1A1A", badge: <span className="text-base">💬</span> },
-  { provider: "naver", label: "Naver로 로그인", bg: "#03C75A", color: "#FFFFFF", badge: <span className="font-heading text-sm font-bold text-fg-inverse">N</span> },
 ];
 
 export default function Login() {
