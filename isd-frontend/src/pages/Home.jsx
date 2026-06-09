@@ -209,7 +209,8 @@ export default function Home() {
                 // 매장 카드 클릭 → 지도 탭에서 해당 매장 상세(팝오버) 열기
                 <Link key={s.store_id} to={`/map?store=${s.store_id}`} className="block transition hover:-translate-y-0.5">
                   <StoreCard
-                    emoji={emojiOf(s.trend?.name)}
+                    image={s.sample_image_url}
+                    emoji={null}
                     name={s.name}
                     desc={s.featured_product ? `${s.featured_product.name} · ${Number(s.featured_product.price ?? 0).toLocaleString()}원` : "등록된 메뉴 없음"}
                     distance={s.distance_km != null ? `${s.distance_km} km` : ""}
