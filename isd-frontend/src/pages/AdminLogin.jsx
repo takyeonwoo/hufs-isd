@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ShieldCheck, User, Lock, EyeOff, ArrowRight, Info, ArrowLeft } from "lucide-react";
+import { ShieldCheck, User, Lock, Eye, EyeOff, ArrowRight, Info, ArrowLeft } from "lucide-react";
 import { supabase } from "../lib/supabase.js";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("admin@foorendy.co");
   const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false); // (4) 비밀번호 표시 토글
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -51,9 +52,11 @@ export default function AdminLogin() {
           <div className="flex h-[50px] items-center justify-between rounded-xl border border-accent bg-surface-primary px-4">
             <div className="flex items-center gap-2.5">
               <Lock size={16} className="text-fg-secondary" />
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="비밀번호" className="bg-transparent font-data text-sm font-bold text-fg-primary outline-none" />
+              <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} placeholder="비밀번호" className="bg-transparent font-data text-sm font-bold text-fg-primary outline-none" />
             </div>
-            <EyeOff size={16} className="text-fg-muted" />
+            <button type="button" onClick={() => setShowPw((v) => !v)} title={showPw ? "비밀번호 숨기기" : "비밀번호 표시"}>
+              {showPw ? <Eye size={16} className="text-fg-secondary" /> : <EyeOff size={16} className="text-fg-muted" />}
+            </button>
           </div>
         </div>
 

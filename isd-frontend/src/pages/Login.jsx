@@ -1,13 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Flame, ShieldCheck } from "lucide-react";
 import { supabase } from "../lib/supabase.js";
-
-const stats = [
-  { label: "등록 매장", value: "312", accent: false },
-  { label: "추적 트렌드", value: "24", accent: false },
-  { label: "실시간 재고", value: "LIVE", accent: true },
-];
+import { api } from "../lib/api.js";
 
 const socials = [
   { provider: "google", label: "Google로 로그인", bg: "#FFFFFF", color: "#1A1A1A", border: true, badge: <span className="font-heading text-lg font-bold text-[#4285F4]">G</span> },
@@ -17,6 +12,20 @@ const socials = [
 
 export default function Login() {
   const [error, setError] = useState(null);
+  const [storeCount, setStoreCount] = useState(null);
+  const [trendCount, setTrendCount] = useState(null);
+
+  // (5) 등록 매장 수 / 추적 트렌드 수 실제 데이터
+  useEffect(() => {
+    api.get("/stores").then((d) => setStoreCount((d || []).length)).catch(() => setStoreCount(null));
+    api.get("/trends?limit=100").then((d) => setTrendCount((d || []).length)).catch(() => setTrendCount(null));
+  }, []);
+
+  const stats = [
+    { label: "등록 매장", value: storeCount != null ? String(storeCount) : "—", accent: false },
+    { label: "추적 트렌드", value: trendCount != null ? String(trendCount) : "—", accent: false },
+    { label: "실시간 재고", value: "LIVE", accent: true },
+  ];
 
   // 소셜 로그인 → Supabase OAuth (성공 시 세션 발급)
   async function handleSocial(provider) {

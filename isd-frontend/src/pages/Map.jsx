@@ -332,11 +332,16 @@ export default function MapPage() {
   }, [trendParam]);
 
   useEffect(() => {
+    // trend 파라미터로 들어왔는데 아직 activeId 가 정해지지 않았다면(트렌드 목록 로딩 중)
+    // 전체 매장을 먼저 불러왔다가 덮어쓰는 깜빡임을 피하려고 대기한다.
+    if (trendParam && activeId == null) return;
+    let ignore = false; // 직전(전체) 요청의 늦은 응답이 필터 결과를 덮어쓰지 않도록
     const trendQ = activeId ? `&trend_id=${activeId}` : "";
     api.get(`/stores?lat=${MY_LOCATION.lat}&lng=${MY_LOCATION.lng}&radius=${RADIUS_KM}${trendQ}`)
-      .then((d) => setStores(d || []))
-      .catch(() => setStores([]));
-  }, [activeId]);
+      .then((d) => { if (!ignore) setStores(d || []); })
+      .catch(() => { if (!ignore) setStores([]); });
+    return () => { ignore = true; };
+  }, [activeId, trendParam]);
 
   const select = useCallback((id) => {
     logEvent("VIEW_STORE", { store_id: id }); // (28) 매장 상세 조회

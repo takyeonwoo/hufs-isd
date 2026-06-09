@@ -125,11 +125,27 @@ function ProductRow({ p, trends, onChanged, onDeleted }) {
   const [qty, setQty] = useState(p.quantity);
   const [status, setStatus] = useState(p.stock_status);
   const [busy, setBusy] = useState(false);
-  // (13) 인라인 수정
+  // (13) 인라인 수정 — 이름/가격/트렌드/이미지
   const [editing, setEditing] = useState(false);
-  const [cur, setCur] = useState({ name: p.name, price: p.price, trend_id: p.trend_id });
+  const [cur, setCur] = useState({ name: p.name, price: p.price, trend_id: p.trend_id, image_url: p.image_url });
   const [draft, setDraft] = useState(cur);
   const [saving, setSaving] = useState(false);
+  const fileRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
+  const pickImage = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { image_url } = await api.upload("/uploads/product-image", file);
+      setDraft((d) => ({ ...d, image_url }));
+    } catch (err) {
+      alert(`이미지 업로드 실패: ${err.message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const applyQty = async (body) => {
     setBusy(true);
@@ -163,16 +179,18 @@ function ProductRow({ p, trends, onChanged, onDeleted }) {
     if (!draft.name.trim()) return alert("메뉴명을 입력하세요.");
     setSaving(true);
     try {
-      // (13) 상품 수정 — 이름/가격/트렌드
+      // (13) 상품 수정 — 이름/가격/트렌드/이미지
       const updated = await api.patch(`/products/${p.product_id}`, {
         name: draft.name.trim(),
         price: draft.price === "" || draft.price == null ? null : Number(draft.price),
         trend_id: draft.trend_id ? Number(draft.trend_id) : undefined,
+        image_url: draft.image_url ?? null,
       });
       setCur({
         name: updated?.name ?? draft.name.trim(),
         price: updated?.price ?? (draft.price === "" ? null : Number(draft.price)),
         trend_id: updated?.trend_id ?? (draft.trend_id ? Number(draft.trend_id) : null),
+        image_url: updated?.image_url ?? draft.image_url ?? null,
       });
       setEditing(false);
       onChanged?.(p.product_id);
@@ -188,9 +206,25 @@ function ProductRow({ p, trends, onChanged, onDeleted }) {
   return (
     <div className="flex items-center bg-surface-primary px-5 py-3.5">
       <div className="flex w-[220px] items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-surface-secondary">
-          {p.image_url && <img src={p.image_url} alt="" className="h-full w-full object-cover" />}
-        </span>
+        {editing ? (
+          // (1) 수정 모드: 썸네일 클릭 → 이미지 교체 업로드
+          <>
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={pickImage} className="hidden" />
+            <button
+              onClick={() => fileRef.current?.click()}
+              title="사진 변경"
+              className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-accent bg-surface-secondary"
+            >
+              {draft.image_url ? <img src={draft.image_url} alt="" className="h-full w-full object-cover" />
+                : uploading ? <span className="font-data text-[9px] text-accent">…</span>
+                : <ImagePlus size={14} className="text-accent" />}
+            </button>
+          </>
+        ) : (
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-secondary">
+            {cur.image_url && <img src={cur.image_url} alt="" className="h-full w-full object-cover" />}
+          </span>
+        )}
         {editing ? (
           <input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} className={editInput + " w-[150px] font-bold"} />
         ) : (
@@ -216,16 +250,16 @@ function ProductRow({ p, trends, onChanged, onDeleted }) {
       </div>
       <div className="w-[150px]"><QtyBox qty={qty} onDelta={changeQty} onSet={setQtyAbs} busy={busy} /></div>
       <div className="w-[110px]"><StatusPill status={PILL_BY_STATUS[status] ?? OUT} /></div>
-      <div className="flex flex-1 justify-end gap-1.5">
+      <div className="flex flex-1 shrink-0 justify-end gap-1.5">
         {editing ? (
           <>
-            <button onClick={save} disabled={saving} className="flex h-8 items-center justify-center rounded-full bg-accent px-3 font-body text-[11px] font-bold text-fg-inverse disabled:opacity-50">{saving ? "저장 중…" : "저장"}</button>
-            <button onClick={() => setEditing(false)} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><X size={14} className="text-fg-muted" /></button>
+            <button onClick={save} disabled={saving || uploading} className="flex h-8 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-accent px-3 font-body text-[11px] font-bold text-fg-inverse disabled:opacity-50">{saving ? "저장 중" : "저장"}</button>
+            <button onClick={() => setEditing(false)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-secondary"><X size={14} className="text-fg-muted" /></button>
           </>
         ) : (
           <>
-            <button onClick={startEdit} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><Pencil size={13} className="text-fg-muted" /></button>
-            <button onClick={remove} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><Trash2 size={14} className="text-fg-muted" /></button>
+            <button onClick={startEdit} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-secondary"><Pencil size={13} className="text-fg-muted" /></button>
+            <button onClick={remove} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-secondary"><Trash2 size={14} className="text-fg-muted" /></button>
           </>
         )}
       </div>
@@ -454,6 +488,7 @@ function InventoryCard({ storeId, trends }) {
 function NoticeCard({ storeId }) {
   const [notices, setNotices] = useState([]);
   const [draft, setDraft] = useState("");
+  const [expires, setExpires] = useState(""); // (3) 만료일 YYYY-MM-DD (선택)
   const [saving, setSaving] = useState(false);
   // (19) 인라인 수정
   const [editingId, setEditingId] = useState(null);
@@ -473,8 +508,14 @@ function NoticeCard({ storeId }) {
     if (!draft.trim()) return alert("공지 내용을 입력하세요.");
     setSaving(true);
     try {
-      await api.post(`/stores/${storeId}/notices`, { content: draft.trim(), status: "PUBLISHED" });
+      await api.post(`/stores/${storeId}/notices`, {
+        content: draft.trim(),
+        status: "PUBLISHED",
+        // (3) 만료일 선택 시 그날 23:59:59 까지, 미선택이면 만료 없음(null)
+        expires_at: expires ? new Date(`${expires}T23:59:59`).toISOString() : null,
+      });
       setDraft("");
+      setExpires("");
       load();
     } catch (e) {
       alert(`게시 실패: ${e.message}`);
@@ -537,7 +578,21 @@ function NoticeCard({ storeId }) {
           placeholder="예) 우베 케이크 25개 입고 완료! 평일 17시 이후엔 소량 또는 품절될 수 있어요."
           className="flex h-[120px] w-full resize-none rounded-lg border border-border-soft bg-surface-primary px-4 py-3.5 font-body text-[13px] leading-[1.6] text-fg-primary outline-none placeholder:text-fg-muted"
         />
-        <div className="flex w-full items-center justify-end">
+        <div className="flex w-full items-center justify-between">
+          {/* (3) 만료일 설정 (선택) */}
+          <label className="flex items-center gap-1.5 font-body text-[11px] font-semibold text-fg-muted">
+            만료일
+            <input
+              type="date"
+              value={expires}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setExpires(e.target.value)}
+              className="rounded-lg border border-border-soft bg-surface-primary px-2.5 py-1 font-data text-[11px] text-fg-primary outline-none"
+            />
+            {expires && (
+              <button onClick={() => setExpires("")} className="font-body text-[11px] font-semibold text-accent">지움</button>
+            )}
+          </label>
           <button
             onClick={publish}
             disabled={saving}
