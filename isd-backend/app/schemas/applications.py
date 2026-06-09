@@ -10,6 +10,7 @@ class ApplicationCreateIn(BaseModel):
     phone: str | None = None
     business_reg_no: str
     business_license_url: str
+    naver_place_url: str
     terms_agreed_at: datetime
     marketing_agreed: bool = False
 

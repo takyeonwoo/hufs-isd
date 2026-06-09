@@ -1,4 +1,5 @@
 """Applications(입점 신청) — API_SPEC §8"""
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, status
@@ -11,6 +12,21 @@ from app.schemas.applications import ApplicationCreateIn, RejectIn
 from app.schemas.common import ApplicationStatus, Pagination, pagination_params
 
 router = APIRouter(prefix="/applications", tags=["applications"])
+
+
+def _normalize_naver_place_url(url: str | None) -> str | None:
+    """네이버 지도 URL 에서 place ID 만 뽑아 표준 형식으로.
+
+    예) https://map.naver.com/p/entry/place/1664294602?placePath=... →
+        https://map.naver.com/p/entry/place/1664294602
+    ID 를 못 찾으면(naver.me 단축링크 등) 원본 그대로 둔다.
+    """
+    if not url:
+        return url
+    m = re.search(r"place/(\d+)", url) or re.search(r"/(\d{6,})", url)
+    if m:
+        return f"https://map.naver.com/p/entry/place/{m.group(1)}"
+    return url.strip()
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -37,6 +53,7 @@ async def create_application(body: ApplicationCreateIn, user: CurrentUser = Depe
         "phone": body.phone,
         "business_reg_no": body.business_reg_no,
         "business_license_url": body.business_license_url,
+        "naver_place_url": _normalize_naver_place_url(body.naver_place_url),
         "terms_agreed_at": body.terms_agreed_at.isoformat(),
         "marketing_agreed": body.marketing_agreed,
         "status": "PENDING",
@@ -125,6 +142,7 @@ async def approve(application_id: int, admin: CurrentUser = Depends(require_admi
         "address": app.get("address"),
         "phone": app.get("phone"),
         "business_reg_no": app.get("business_reg_no"),
+        "naver_place_url": app.get("naver_place_url"),
     }
     if coords:
         store_row["latitude"], store_row["longitude"] = coords

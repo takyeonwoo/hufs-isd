@@ -55,7 +55,7 @@ const inputCls = "h-12 w-full rounded-xl border border-border-soft bg-surface-pr
 
 export default function Apply() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ applicant_name: "", cafe_name: "", address: "", phone: "", business_reg_no: "" });
+  const [form, setForm] = useState({ applicant_name: "", cafe_name: "", address: "", phone: "", business_reg_no: "", naver_place_url: "" });
   const [file, setFile] = useState(null);
   const [termsAgreed, setTermsAgreed] = useState(true);
   const [marketing, setMarketing] = useState(false);
@@ -72,6 +72,13 @@ export default function Apply() {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // 사업자등록번호: 숫자만 입력받아 000-00-00000 (3-2-5) 형식으로 자동 포맷
+  const setBizNo = (e) => {
+    const d = e.target.value.replace(/\D/g, "").slice(0, 10);
+    const v = [d.slice(0, 3), d.slice(3, 5), d.slice(5, 10)].filter(Boolean).join("-");
+    setForm((f) => ({ ...f, business_reg_no: v }));
+  };
+
   // 주소 검색 팝업 → 선택 시 도로명 주소를 form.address 에 채움
   const openPostcode = async () => {
     try {
@@ -87,8 +94,8 @@ export default function Apply() {
 
   const submit = async () => {
     setError(null);
-    if (!form.applicant_name.trim() || !form.cafe_name.trim() || !form.address.trim() || !form.business_reg_no.trim()) {
-      setError("필수 항목(신청자 이름·카페 이름·주소·사업자등록번호)을 입력해주세요.");
+    if (!form.applicant_name.trim() || !form.cafe_name.trim() || !form.address.trim() || !form.business_reg_no.trim() || !form.naver_place_url.trim()) {
+      setError("필수 항목(신청자 이름·카페 이름·주소·사업자등록번호·네이버 플레이스 URL)을 입력해주세요.");
       return;
     }
     if (!termsAgreed) {
@@ -111,6 +118,7 @@ export default function Apply() {
         phone: form.phone.trim() || null,
         business_reg_no: form.business_reg_no.trim(),
         business_license_url,
+        naver_place_url: form.naver_place_url.trim(),
         terms_agreed_at: new Date().toISOString(),
         marketing_agreed: marketing,
       });
@@ -170,8 +178,12 @@ export default function Apply() {
               <input className={inputCls} placeholder="02-1234-5678" value={form.phone} onChange={set("phone")} />
             </Field>
 
+            <Field label="네이버 플레이스 URL" required hint="손님 매장 상세에서 '네이버 플레이스 보기' 링크로 노출됩니다">
+              <input className={inputCls} placeholder="https://naver.me/..." value={form.naver_place_url} onChange={set("naver_place_url")} />
+            </Field>
+
             <Field label="사업자등록번호" required hint="등록번호 10자리를 입력해주세요">
-              <input className={inputCls + " font-data"} placeholder="000-00-00000" value={form.business_reg_no} onChange={set("business_reg_no")} />
+              <input className={inputCls + " font-data"} inputMode="numeric" placeholder="000-00-00000" value={form.business_reg_no} onChange={setBizNo} />
             </Field>
 
             <Field label="사업자등록증 사본" required>

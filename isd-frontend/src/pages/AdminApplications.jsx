@@ -183,6 +183,17 @@ function DetailPanel({ detail, onApprove, onReject }) {
             <span className={(d.mono ? "font-data" : "font-body") + " text-xs font-semibold text-fg-primary"}>{d.v}</span>
           </div>
         ))}
+        {/* 네이버 플레이스 — 승인 전 더블체크용 (클릭하면 새 탭에서 열림) */}
+        <div className="flex w-full items-center justify-between">
+          <span className="font-body text-[11px] font-semibold text-fg-muted">네이버 플레이스</span>
+          {detail.naver_place_url ? (
+            <a href={detail.naver_place_url} target="_blank" rel="noreferrer" className="max-w-[210px] truncate font-body text-xs font-semibold text-accent underline">
+              링크 열어 확인 ↗
+            </a>
+          ) : (
+            <span className="font-body text-xs font-semibold text-fg-muted">미입력</span>
+          )}
+        </div>
       </div>
 
       <div className="h-px w-full bg-border-soft" />

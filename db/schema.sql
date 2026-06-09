@@ -125,6 +125,7 @@ create table store_applications (
     phone                text,
     business_reg_no      text,
     business_license_url text,
+    naver_place_url      text,
     terms_agreed_at      timestamptz not null,
     marketing_agreed     boolean default false,
     status               text not null default 'PENDING'

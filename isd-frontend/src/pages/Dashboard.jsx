@@ -752,74 +752,6 @@ function EventCard({ events }) {
   );
 }
 
-/* ---------- Store info editor (10) ---------- */
-function StoreEditPanel({ store, storeId, onSaved, onClose }) {
-  const [form, setForm] = useState({
-    name: store?.name ?? "",
-    address: store?.address ?? "",
-    phone: store?.phone ?? "",
-    naver_place_url: store?.naver_place_url ?? "",
-  });
-  const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const field = "h-11 w-full rounded-xl border border-border-soft bg-surface-primary px-3.5 font-body text-[13px] text-fg-primary outline-none placeholder:text-fg-muted";
-
-  const save = async () => {
-    if (!storeId) return alert("매장 정보를 아직 불러오지 못했습니다.");
-    if (!form.name.trim()) return alert("매장 이름을 입력하세요.");
-    setSaving(true);
-    try {
-      // (10) 매장 정보 수정
-      const updated = await api.patch(`/stores/${storeId}`, {
-        name: form.name.trim(),
-        address: form.address.trim() || undefined,
-        phone: form.phone.trim() || null,
-        naver_place_url: form.naver_place_url.trim() || null,
-      });
-      onSaved?.(updated ?? form);
-      onClose?.();
-    } catch (e) {
-      alert(`매장 정보 수정 실패: ${e.message}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="flex flex-col gap-3.5 rounded-2xl bg-surface-primary p-7">
-      <div className="flex w-full items-center justify-between">
-        <h3 className="font-heading text-base font-bold text-fg-primary">🏪 매장 정보 수정</h3>
-        <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-secondary"><X size={14} className="text-fg-muted" /></button>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1.5">
-          <span className="font-body text-[11px] font-semibold text-fg-muted">매장 이름</span>
-          <input value={form.name} onChange={set("name")} className={field} placeholder="매장 이름" />
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span className="font-body text-[11px] font-semibold text-fg-muted">연락처</span>
-          <input value={form.phone} onChange={set("phone")} className={field} placeholder="02-1234-5678" />
-        </label>
-        <label className="col-span-2 flex flex-col gap-1.5">
-          <span className="font-body text-[11px] font-semibold text-fg-muted">주소</span>
-          <input value={form.address} onChange={set("address")} className={field} placeholder="서울특별시 마포구 ..." />
-        </label>
-        <label className="col-span-2 flex flex-col gap-1.5">
-          <span className="font-body text-[11px] font-semibold text-fg-muted">네이버 플레이스 URL</span>
-          <input value={form.naver_place_url} onChange={set("naver_place_url")} className={field} placeholder="https://naver.me/..." />
-        </label>
-      </div>
-      <div className="flex justify-end gap-2">
-        <button onClick={onClose} className="flex h-10 items-center rounded-full bg-surface-secondary px-4 font-body text-[13px] font-bold text-fg-primary">취소</button>
-        <button onClick={save} disabled={saving} className="flex h-10 items-center gap-1.5 rounded-full bg-accent px-4 font-body text-[13px] font-bold text-fg-inverse disabled:opacity-50">
-          <Check size={14} className="text-fg-inverse" />
-          {saving ? "저장 중…" : "저장"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /* ---------- Account footer ---------- */
 function AccountFooter({ onLogout, onDeleteStore, onWithdraw }) {
   return (
@@ -861,7 +793,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [storeEditOpen, setStoreEditOpen] = useState(false);
   const [storeMenuOpen, setStoreMenuOpen] = useState(false); // (6) 매장 전환 드롭다운
   const [trends, setTrends] = useState([]);
   const [stores, setStores] = useState([]);   // (6) 내 매장 전체
@@ -952,7 +883,7 @@ export default function Dashboard() {
                     {stores.map((s) => (
                       <button
                         key={s.store_id}
-                        onClick={() => { setStore(s); setStoreMenuOpen(false); setStoreEditOpen(false); }}
+                        onClick={() => { setStore(s); setStoreMenuOpen(false); }}
                         className={"flex items-center justify-between px-3.5 py-2 text-left font-body text-xs hover:bg-surface-secondary " + (s.store_id === storeId ? "font-bold text-accent" : "font-medium text-fg-primary")}
                       >
                         <span className="truncate">{s.name}</span>
@@ -965,12 +896,6 @@ export default function Dashboard() {
               {profile?.email && (
                 <span className="font-body text-xs text-fg-muted">{profile.email}</span>
               )}
-              <button
-                onClick={() => setStoreEditOpen((v) => !v)}
-                className="flex h-7 items-center gap-1 rounded-full border border-border-soft bg-surface-primary px-2.5 font-body text-[11px] font-semibold text-fg-secondary"
-              >
-                <Pencil size={11} className="text-fg-muted" /> 정보 수정
-              </button>
             </div>
             <h1 className="font-heading text-[32px] font-bold text-fg-primary">안녕하세요, {userName ? `${userName} ` : ""}사장님 👋</h1>
             <p className="font-body text-[13px] text-fg-secondary">
@@ -978,15 +903,6 @@ export default function Dashboard() {
             </p>
           </div>
 
-          {/* (10) 매장 정보 수정 패널 */}
-          {storeEditOpen && (
-            <StoreEditPanel
-              store={store}
-              storeId={storeId}
-              onSaved={(u) => setStore((s) => ({ ...s, ...u }))}
-              onClose={() => setStoreEditOpen(false)}
-            />
-          )}
 
           {/* KPI row */}
           <div className="flex gap-5">
