@@ -5,17 +5,16 @@ import { supabase } from "./supabase.js";
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/v1";
 const ADMIN_TOKEN_KEY = "foorendy_admin_token";
 
-// 인증 토큰: 관리자 토큰(localStorage)이 있으면 우선, 없으면 Supabase 세션 JWT.
-// 사장님 = Supabase OAuth 세션, 관리자 = /auth/admin-login 으로 받은 고정계정 JWT.
+// 인증 토큰: 사장님 Supabase 세션을 우선, 없으면 관리자 고정계정 토큰(localStorage).
+// (세션 우선이라, 관리자로 로그인했던 토큰이 localStorage 에 남아있어도 사장님 로그인이 가려지지 않는다.)
 async function getAuthToken() {
-  const adminToken = localStorage.getItem(ADMIN_TOKEN_KEY);
-  if (adminToken) return adminToken;
   try {
     const { data } = await supabase.auth.getSession();
-    return data?.session?.access_token ?? null;
+    if (data?.session?.access_token) return data.session.access_token;
   } catch {
-    return null;
+    /* 세션 조회 실패 시 관리자 토큰으로 폴백 */
   }
+  return localStorage.getItem(ADMIN_TOKEN_KEY);
 }
 
 async function request(path, { method = "GET", body, token, wantMeta = false } = {}) {

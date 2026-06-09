@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, BadgeCheck, Search, Upload, Send } from "lucide-react";
 import TopNav from "../components/TopNav.jsx";
 import { api } from "../lib/api.js";
@@ -62,6 +62,9 @@ export default function Apply() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [userEmail, setUserEmail] = useState(null); // null=로딩, ""=이메일없음(카카오 등)
+  const [searchParams] = useSearchParams();
+  const isNewStore = searchParams.get("new") === "1"; // 대시보드 '새 매장 신청' 진입
+  const [ready, setReady] = useState(isNewStore); // 게이트웨이 판단 끝났는지
 
   // 로그인한 사용자의 이메일 (Supabase 세션)
   useEffect(() => {
@@ -69,6 +72,27 @@ export default function Apply() {
       .then(({ data }) => setUserEmail(data?.user?.email ?? ""))
       .catch(() => setUserEmail(""));
   }, []);
+
+  // 로그인 직후 진입 분기: 매장 있으면 대시보드, 신청만 있으면 현황, 둘 다 없으면 신청 폼.
+  // (?new=1 로 들어오면 분기 없이 바로 폼 — 기존 사장님이 새 매장 신청하는 경우)
+  useEffect(() => {
+    if (isNewStore) return;
+    let alive = true;
+    (async () => {
+      try {
+        const stores = await api.get("/stores/me");
+        if (!alive) return;
+        if (stores?.length) return navigate("/dashboard", { replace: true });
+        const apps = await api.get("/applications/me").catch(() => []);
+        if (!alive) return;
+        if (apps?.length) return navigate("/apply/complete", { replace: true });
+        setReady(true);
+      } catch {
+        if (alive) navigate("/login", { replace: true });
+      }
+    })();
+    return () => { alive = false; };
+  }, [isNewStore, navigate]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -129,6 +153,14 @@ export default function Apply() {
       setSubmitting(false);
     }
   };
+
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-surface-secondary">
+        <span className="font-body text-sm text-fg-muted">로그인 정보를 확인하는 중…</span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen w-full justify-center bg-surface-secondary">

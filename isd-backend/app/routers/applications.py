@@ -1,6 +1,7 @@
 """Applications(입점 신청) — API_SPEC §8"""
 import re
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, Query, status
 
@@ -14,19 +15,34 @@ from app.schemas.common import ApplicationStatus, Pagination, pagination_params
 router = APIRouter(prefix="/applications", tags=["applications"])
 
 
+# place ID 는 알려진 경로 세그먼트 바로 뒤의 숫자만 인정한다.
+# (URL 안의 좌표·파라미터 같은 임의 숫자를 ID 로 오인하지 않도록.)
+#   - map.naver.com/p/entry/place/{id}, /v5/entry/place/{id}
+#   - place.naver.com/{category}/{id}, m.place / pcmap.place 도 동일
+_PLACE_ID_PATTERNS = (
+    re.compile(r"/place/(\d+)"),
+    re.compile(r"/(?:restaurant|cafe|hairshop|accommodation|attraction|hospital)/(\d+)"),
+)
+
+
 def _normalize_naver_place_url(url: str | None) -> str | None:
     """네이버 지도 URL 에서 place ID 만 뽑아 표준 형식으로.
 
     예) https://map.naver.com/p/entry/place/1664294602?placePath=... →
         https://map.naver.com/p/entry/place/1664294602
-    ID 를 못 찾으면(naver.me 단축링크 등) 원본 그대로 둔다.
+    네이버 도메인이 아니거나 ID 를 못 찾으면(naver.me 단축링크 등) 원본 그대로 둔다.
     """
     if not url:
         return url
-    m = re.search(r"place/(\d+)", url) or re.search(r"/(\d{6,})", url)
-    if m:
-        return f"https://map.naver.com/p/entry/place/{m.group(1)}"
-    return url.strip()
+    url = url.strip()
+    host = (urlparse(url).hostname or "").lower()
+    if not (host == "naver.me" or host.endswith(".naver.com") or host.endswith(".naver.me")):
+        return url
+    for pat in _PLACE_ID_PATTERNS:
+        m = pat.search(url)
+        if m:
+            return f"https://map.naver.com/p/entry/place/{m.group(1)}"
+    return url
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

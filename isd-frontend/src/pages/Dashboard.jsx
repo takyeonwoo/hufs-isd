@@ -753,16 +753,23 @@ function EventCard({ events }) {
 }
 
 /* ---------- Account footer ---------- */
-function AccountFooter({ onLogout, onDeleteStore, onWithdraw }) {
+function AccountFooter({ onLogout, onDeleteStore, onWithdraw, onNewStore }) {
   return (
     <div className="flex items-center justify-between rounded-2xl bg-surface-primary px-7 py-5">
       <div className="flex flex-col gap-1">
         <span className="font-body text-sm font-bold text-fg-primary">계정 관리</span>
         <span className="font-body text-xs text-fg-muted">
-          로그아웃하거나, 더 이상 Foorendy를 사용하지 않으신다면 매장을 삭제하거나 계정을 탈퇴할 수 있어요.
+          새 매장을 추가로 입점 신청하거나, 로그아웃·매장 삭제·회원 탈퇴를 할 수 있어요.
         </span>
       </div>
       <div className="flex items-center gap-2.5">
+        <button
+          onClick={onNewStore}
+          className="flex h-10 items-center gap-1.5 rounded-full bg-accent px-4 font-body text-[13px] font-bold text-fg-inverse"
+        >
+          <Plus size={14} className="text-fg-inverse" />
+          새 매장 입점 신청
+        </button>
         <button
           onClick={onLogout}
           className="flex h-10 items-center gap-1.5 rounded-full border border-border-soft bg-surface-primary px-4 font-body text-[13px] font-bold text-fg-primary"
@@ -811,7 +818,13 @@ export default function Dashboard() {
 
   useEffect(() => {
     api.get("/trends?limit=100").then((d) => setTrends(d || [])).catch(() => setTrends([]));
-    api.get("/stores/me").then((s) => { setStores(s || []); setStore(s?.[0] ?? null); }).catch(() => { setStores([]); setStore(null); });
+    // 가드: 매장 없으면 분기 게이트웨이로(→ 신청/현황), 인증 실패면 로그인으로.
+    api.get("/stores/me")
+      .then((s) => {
+        if (!s?.length) return navigate("/apply", { replace: true });
+        setStores(s); setStore(s[0]);
+      })
+      .catch(() => navigate("/login", { replace: true }));
     api.get("/auth/me").then(setProfile).catch(() => setProfile(null)); // (2) 내 프로필
     // (7) 인사말 이름 — 입점신청서의 신청자명 우선
     api.get("/applications/me")
@@ -925,6 +938,7 @@ export default function Dashboard() {
           {/* account management */}
           <AccountFooter
             onLogout={handleLogout}
+            onNewStore={() => navigate("/apply?new=1")}
             onDeleteStore={() => setDeleteOpen(true)}
             onWithdraw={() => setWithdrawOpen(true)}
           />
@@ -952,6 +966,11 @@ export default function Dashboard() {
       <WithdrawModal
         open={withdrawOpen}
         onClose={() => setWithdrawOpen(false)}
+        user={{
+          name: userName ? `${userName} 사장님` : "사장님",
+          initial: userName ? userName.trim()[0] : "F",
+          meta: `${profile?.email ? `${profile.email} · ` : ""}매장 ${stores.length}개 운영 중`,
+        }}
         onConfirm={async () => {
           try {
             await api.del("/auth/me");
