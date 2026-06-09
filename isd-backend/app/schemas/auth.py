@@ -7,3 +7,8 @@ class AuthCallbackIn(BaseModel):
     provider: Literal["google", "kakao", "naver"]
     code: str
     role: Literal["owner", "admin"] = "owner"
+
+
+class AdminLoginIn(BaseModel):
+    username: str
+    password: str

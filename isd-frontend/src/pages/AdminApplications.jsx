@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { Search, FileText, Check, X, ChevronDown, Download } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Search, FileText, Check, X, ChevronDown, Download, LogOut } from "lucide-react";
 import { api } from "../lib/api.js";
 
 /* ---------- status pill ---------- */
@@ -31,6 +32,11 @@ function fmtDate(iso) {
 
 /* ---------- nav ---------- */
 function AdminNav() {
+  const navigate = useNavigate();
+  const logout = () => {
+    api.clearAdminToken();
+    navigate("/admin/login");
+  };
   return (
     <header className="flex h-16 w-full items-center justify-between bg-surface-inverse px-10">
       <div className="flex items-center gap-3.5">
@@ -41,8 +47,11 @@ function AdminNav() {
         <span className="rounded-full bg-[#2A2A2A] px-2.5 py-1 font-body text-[10px] font-bold text-accent">ADMIN</span>
       </div>
       <div className="flex items-center gap-3.5">
-        <span className="font-body text-xs font-medium text-[#B0B0B0]">admin@foorendy.co</span>
+        <span className="font-body text-xs font-medium text-[#B0B0B0]">admin</span>
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent font-body text-xs font-bold text-fg-inverse">A</span>
+        <button onClick={logout} title="로그아웃" className="flex items-center gap-1 rounded-full bg-[#2A2A2A] px-3 py-1.5 font-body text-[11px] font-semibold text-[#B0B0B0]">
+          <LogOut size={12} /> 로그아웃
+        </button>
       </div>
     </header>
   );

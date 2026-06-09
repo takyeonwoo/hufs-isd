@@ -1,12 +1,50 @@
 """Auth — API_SPEC §3"""
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, status
 
-from app.core.deps import CurrentUser, get_current_user
-from app.core.responses import ApiError, ok
+from app.core.config import settings
+from app.core.deps import DEV_ADMIN_ID, CurrentUser, get_current_user
+from app.core.responses import ApiError, ok, unauthorized
 from app.core.supabase import get_service_client
-from app.schemas.auth import AuthCallbackIn
+from app.schemas.auth import AdminLoginIn, AuthCallbackIn
+
+try:
+    from jose import jwt
+except ImportError:
+    jwt = None  # type: ignore
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post("/admin-login")
+async def admin_login(body: AdminLoginIn):
+    """관리자(심사자) 고정 계정 로그인. (신규)
+
+    Supabase 를 쓰지 않는 admin 전용. 아이디/비번이 맞으면 기존 deps 가 그대로
+    검증하는 JWT(HS256, aud=authenticated, role=admin)를 발급한다.
+    sub 는 시드된 admin(admin 테이블)에 매핑돼 reviewed_by FK 가 깨지지 않는다.
+    """
+    if body.username != settings.admin_username or body.password != settings.admin_password:
+        raise unauthorized("아이디 또는 비밀번호가 올바르지 않습니다.")
+    if not jwt or not settings.supabase_jwt_secret:
+        raise ApiError("JWT_NOT_CONFIGURED", "서버 JWT 시크릿이 설정되지 않았습니다.", status_code=500)
+
+    now = datetime.now(timezone.utc)
+    token = jwt.encode(
+        {
+            "sub": DEV_ADMIN_ID,
+            "aud": "authenticated",
+            "role": "authenticated",
+            "email": "admin@foorendy.local",
+            "user_metadata": {"role": "admin"},
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(hours=12)).timestamp()),
+        },
+        settings.supabase_jwt_secret,
+        algorithm="HS256",
+    )
+    return ok({"access_token": token, "role": "admin", "expires_in": 12 * 3600})
 
 
 @router.post("/callback")

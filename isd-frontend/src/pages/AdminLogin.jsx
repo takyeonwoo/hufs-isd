@@ -1,23 +1,23 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ShieldCheck, User, Lock, Eye, EyeOff, ArrowRight, Info, ArrowLeft } from "lucide-react";
-import { supabase } from "../lib/supabase.js";
+import { api } from "../lib/api.js";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@foorendy.co");
+  const [email, setEmail] = useState("admin");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false); // (4) 비밀번호 표시 토글
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // 관리자 로그인 → Supabase 이메일/비밀번호 인증
+  // 관리자 로그인 → 백엔드 고정계정 인증(/auth/admin-login) → JWT 저장
   async function handleLogin() {
     setError(null);
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      const { access_token } = await api.post("/auth/admin-login", { username: email, password });
+      api.setAdminToken(access_token);
       navigate("/admin");
     } catch (e) {
       setError(e.message || "로그인에 실패했습니다.");
@@ -43,7 +43,7 @@ export default function AdminLogin() {
           <label className="font-body text-xs font-semibold text-fg-secondary">관리자 ID</label>
           <div className="flex h-[50px] items-center gap-2.5 rounded-xl border border-border-soft bg-surface-primary px-4">
             <User size={16} className="text-fg-muted" />
-            <input value={email} onChange={(e) => setEmail(e.target.value)} className="flex-1 bg-transparent font-body text-[13px] text-fg-primary outline-none placeholder:text-fg-muted" placeholder="admin@foorendy.co" />
+            <input value={email} onChange={(e) => setEmail(e.target.value)} className="flex-1 bg-transparent font-body text-[13px] text-fg-primary outline-none placeholder:text-fg-muted" placeholder="admin" />
           </div>
         </div>
 

@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # 개발 편의 인증 우회
     dev_fake_auth: bool = False
 
+    # 관리자(심사자) 고정 계정 — Supabase 미사용. POST /auth/admin-login 으로 JWT 발급.
+    admin_username: str = "admin"
+    admin_password: str = "admin"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
