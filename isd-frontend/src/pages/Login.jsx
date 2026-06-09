@@ -6,7 +6,8 @@ import { api } from "../lib/api.js";
 
 const socials = [
   { provider: "google", label: "Google로 로그인", bg: "#FFFFFF", color: "#1A1A1A", border: true, badge: <span className="font-heading text-lg font-bold text-[#4285F4]">G</span> },
-  { provider: "kakao", label: "Kakao로 로그인", bg: "#FEE500", color: "#1A1A1A", badge: <span className="text-base">💬</span> },
+  // 카카오: 이메일 + 닉네임 요청 (동의항목에서 account_email·profile_nickname 켜둬야 함)
+  { provider: "kakao", label: "Kakao로 로그인", bg: "#FEE500", color: "#1A1A1A", scopes: "account_email profile_nickname", badge: <span className="text-base">💬</span> },
 ];
 
 export default function Login() {
@@ -27,12 +28,15 @@ export default function Login() {
   ];
 
   // 소셜 로그인 → Supabase OAuth (성공 시 세션 발급)
-  async function handleSocial(provider) {
+  async function handleSocial(provider, scopes) {
     setError(null);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
-        options: { redirectTo: `${window.location.origin}/apply` },
+        options: {
+          redirectTo: `${window.location.origin}/apply`,
+          ...(scopes ? { scopes } : {}),
+        },
       });
       if (error) throw error;
     } catch (e) {
@@ -90,7 +94,7 @@ export default function Login() {
             {socials.map((s) => (
               <button
                 key={s.label}
-                onClick={() => handleSocial(s.provider)}
+                onClick={() => handleSocial(s.provider, s.scopes)}
                 className="flex h-14 w-full items-center justify-center gap-2.5 rounded-full"
                 style={{ backgroundColor: s.bg, color: s.color, border: s.border ? "1px solid #EDEEF1" : "none" }}
               >

@@ -365,7 +365,11 @@ function AddProductRow({ storeId, trends, onCreated }) {
       <div className="w-[150px]">
         <span className="inline-flex h-8 items-center gap-1 rounded-full bg-surface-primary px-1">
           <button onClick={() => setQty((q) => Math.max(0, q - 1))} className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-secondary"><Minus size={12} className="text-fg-secondary" /></button>
-          <span className="w-7 text-center font-data text-xs font-bold text-fg-primary">{qty}</span>
+          <input
+            value={qty}
+            onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, ""); setQty(v === "" ? 0 : Number(v)); }}
+            className="w-9 bg-transparent text-center font-data text-xs font-bold text-fg-primary outline-none"
+          />
           <button onClick={() => setQty((q) => q + 1)} className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-secondary"><Plus size={12} className="text-fg-secondary" /></button>
         </span>
       </div>
@@ -863,7 +867,10 @@ export default function Dashboard() {
   const [stores, setStores] = useState([]);   // (6) 내 매장 전체
   const [store, setStore] = useState(null);    // 현재 선택된 매장
   const [profile, setProfile] = useState(null);
-  const [userName, setUserName] = useState(""); // (7) 인사말용 이름
+  // (7) 인사말 이름: 입점신청 시 입력한 신청자명(applicant_name) 우선, 없으면 소셜 메타 이름
+  const [applicantName, setApplicantName] = useState("");
+  const [metaName, setMetaName] = useState("");
+  const userName = applicantName || metaName;
   const [storeStats, setStoreStats] = useState({ menus: 0, notices: 0 }); // (11) 삭제 모달용
   const [range, setRange] = useState("7d");    // (10) 조회 기간
   const [summary, setSummary] = useState(null);
@@ -875,14 +882,21 @@ export default function Dashboard() {
     api.get("/trends?limit=100").then((d) => setTrends(d || [])).catch(() => setTrends([]));
     api.get("/stores/me").then((s) => { setStores(s || []); setStore(s?.[0] ?? null); }).catch(() => { setStores([]); setStore(null); });
     api.get("/auth/me").then(setProfile).catch(() => setProfile(null)); // (2) 내 프로필
-    // (7) 인사말 이름: Supabase 세션의 user_metadata 우선, 없으면 이메일 앞부분
+    // (7) 인사말 이름 — 입점신청서의 신청자명 우선
+    api.get("/applications/me")
+      .then((apps) => {
+        const name = (apps || []).find((a) => a.applicant_name)?.applicant_name;
+        if (name) setApplicantName(name);
+      })
+      .catch(() => {});
+    // 폴백: 소셜 계정 메타 이름
     supabase.auth.getUser()
       .then(({ data }) => {
         const u = data?.user;
         const meta = u?.user_metadata || {};
-        setUserName(meta.full_name || meta.name || (u?.email ? u.email.split("@")[0] : ""));
+        setMetaName(meta.full_name || meta.name || "");
       })
-      .catch(() => setUserName(""));
+      .catch(() => {});
   }, []);
 
   // (3) 로그아웃 — Supabase 세션 종료 후 로그인 화면으로

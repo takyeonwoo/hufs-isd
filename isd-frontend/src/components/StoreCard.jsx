@@ -6,6 +6,7 @@ import { MapPin, Timer } from "lucide-react";
  */
 export default function StoreCard({
   emoji = "🥐",
+  image = null,
   thumbBg = "#F5F1FF",
   name = "연남 우베하우스",
   desc = "우베 케이크 · 6,800원",
@@ -16,10 +17,14 @@ export default function StoreCard({
   return (
     <div className="flex h-32 w-full gap-3.5 rounded-xl bg-surface-primary p-3.5">
       <div
-        className="flex h-[100px] w-[100px] shrink-0 items-center justify-center rounded-lg"
+        className="flex h-[100px] w-[100px] shrink-0 items-center justify-center overflow-hidden rounded-lg"
         style={{ backgroundColor: thumbBg }}
       >
-        <span className="text-[40px] leading-none">{emoji}</span>
+        {image ? (
+          <img src={image} alt={name} className="h-full w-full object-cover" />
+        ) : emoji ? (
+          <span className="text-[40px] leading-none">{emoji}</span>
+        ) : null}
       </div>
       <div className="flex flex-1 flex-col justify-between py-0.5">
         <div className="flex flex-col gap-1">

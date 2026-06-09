@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, ArrowRight } from "lucide-react";
+import { Check } from "lucide-react";
 import TopNav from "../components/TopNav.jsx";
 import { api } from "../lib/api.js";
 
@@ -104,9 +104,6 @@ export default function ApplyComplete() {
             <div className="flex w-full gap-2">
               <Link to="/" className="flex h-12 flex-1 items-center justify-center rounded-full bg-surface-secondary font-body text-[13px] font-semibold text-fg-primary">
                 홈으로 돌아가기
-              </Link>
-              <Link to="/dashboard" className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-full bg-accent font-body text-[13px] font-bold text-fg-inverse">
-                신청 상태 확인 <ArrowRight size={14} />
               </Link>
             </div>
           </div>

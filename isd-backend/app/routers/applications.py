@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, status
 
 from app.core.deps import CurrentUser, require_admin, require_owner
+from app.core.geocode import geocode
 from app.core.responses import conflict, not_found, ok, page_meta
 from app.core.supabase import require_service_client
 from app.schemas.applications import ApplicationCreateIn, RejectIn
@@ -116,20 +117,18 @@ async def approve(application_id: int, admin: CurrentUser = Depends(require_admi
     if app["status"] == "APPROVED" and app.get("store_id"):
         return ok({"application_id": application_id, "status": "APPROVED", "store_id": app["store_id"], "reviewed_at": app.get("reviewed_at")})
 
-    store = (
-        db.table("stores")
-        .insert(
-            {
-                "owner_id": app["applicant_id"],
-                "name": app["cafe_name"],
-                "address": app.get("address"),
-                "phone": app.get("phone"),
-                "business_reg_no": app.get("business_reg_no"),
-            }
-        )
-        .execute()
-        .data[0]
-    )
+    # 주소 → 좌표(위경도) 변환. 실패하면 좌표 없이 생성(지도에는 안 뜸).
+    coords = geocode(app.get("address"))
+    store_row = {
+        "owner_id": app["applicant_id"],
+        "name": app["cafe_name"],
+        "address": app.get("address"),
+        "phone": app.get("phone"),
+        "business_reg_no": app.get("business_reg_no"),
+    }
+    if coords:
+        store_row["latitude"], store_row["longitude"] = coords
+    store = db.table("stores").insert(store_row).execute().data[0]
 
     now = datetime.now(timezone.utc).isoformat()
     db.table("store_applications").update(

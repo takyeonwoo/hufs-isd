@@ -152,6 +152,8 @@ function Sidebar({ stores, activeTrend, onSelect, sort, onSort, viewMode, onView
           >
             <StoreCard
               name={s.name}
+              image={s.sample_image_url}
+              emoji={null}
               desc={storeDesc(s)}
               distance={s.distance_km != null ? `${s.distance_km} km` : ""}
               time={timeAgo(s.featured_product?.stock_updated_at)}
@@ -164,17 +166,24 @@ function Sidebar({ stores, activeTrend, onSelect, sort, onSort, viewMode, onView
   );
 }
 
-function StorePopover({ detail, onClose }) {
+function StorePopover({ detail, onClose, trendId, trendName }) {
   if (!detail) return null;
-  const fp = detail.products?.[0];
+  const all = detail.products || [];
+  // 선택한 트렌드 카테고리의 메뉴 전체. (트렌드 미선택이면 전체)
+  const menus = trendId ? all.filter((p) => p.trend_id === trendId) : all;
+  const fp = menus[0] || all[0];
+  // 상단 썸네일: 메뉴 중 사진 있는 첫 번째 (없으면 안 띄움)
+  const headerImg = menus.find((m) => m.image_url)?.image_url || null;
   const status = fp?.stock_status ?? "AVAILABLE";
   const pill = STOCK_PILL[status];
   return (
-    <div className="absolute left-[540px] top-[60px] z-10 flex w-[436px] flex-col gap-3.5 rounded-2xl bg-surface-primary p-5 shadow-[0_8px_24px_rgba(0,0,0,0.16)]">
+    <div className="absolute left-[540px] top-[60px] z-10 flex max-h-[700px] w-[436px] flex-col gap-3.5 overflow-y-auto rounded-2xl bg-surface-primary p-5 shadow-[0_8px_24px_rgba(0,0,0,0.16)]">
       <div className="flex w-full gap-3.5">
-        <div className="flex h-[88px] w-[88px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface-warm">
-          {fp?.image_url ? <img src={fp.image_url} alt="" className="h-full w-full object-cover" /> : <span className="text-[40px] leading-none">🟣</span>}
-        </div>
+        {headerImg && (
+          <div className="flex h-[88px] w-[88px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface-warm">
+            <img src={headerImg} alt="" className="h-full w-full object-cover" />
+          </div>
+        )}
         <div className="flex flex-1 flex-col gap-2">
           <div className="flex w-full items-center justify-between">
             <span className="font-heading text-lg font-bold text-fg-primary">{detail.name}</span>
@@ -192,6 +201,30 @@ function StorePopover({ detail, onClose }) {
           </div>
         </div>
       </div>
+
+      {/* 선택 트렌드 카테고리의 메뉴들. 사진 없는 메뉴는 사진만 생략. */}
+      {menus.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="font-body text-[11px] font-bold text-fg-muted">
+            {trendName ? `${trendName} 메뉴` : "메뉴"} {menus.length}개
+          </span>
+          <div className="flex gap-2.5 overflow-x-auto pb-1">
+            {menus.map((m) => (
+              <div key={m.product_id} className="flex w-[104px] shrink-0 flex-col gap-1.5">
+                {m.image_url && (
+                  <div className="h-[104px] w-[104px] overflow-hidden rounded-xl bg-surface-warm">
+                    <img src={m.image_url} alt={m.name} className="h-full w-full object-cover" />
+                  </div>
+                )}
+                <span className="truncate font-body text-[12px] font-bold text-fg-primary">{m.name}</span>
+                <span className="font-data text-[11px] text-fg-muted">
+                  {m.price != null ? `${Number(m.price).toLocaleString()}원` : "-"} · 잔여 {m.quantity ?? 0}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {detail.active_notice && (
         <div className="rounded-xl bg-surface-secondary p-3.5">
           <p className="font-body text-xs leading-[1.6] text-fg-primary">“{detail.active_notice.content}”</p>
@@ -207,7 +240,7 @@ function StorePopover({ detail, onClose }) {
   );
 }
 
-function MapArea({ stores, detail, onSelect, onClose, viewMode, onViewMode }) {
+function MapArea({ stores, detail, onSelect, onClose, viewMode, onViewMode, trendId, trendName }) {
   const mapEl = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -315,7 +348,7 @@ function MapArea({ stores, detail, onSelect, onClose, viewMode, onViewMode }) {
         </button>
       </div>
 
-      <StorePopover detail={detail} onClose={onClose} />
+      <StorePopover detail={detail} onClose={onClose} trendId={trendId} trendName={trendName} />
     </div>
   );
 }
@@ -407,6 +440,8 @@ export default function MapPage() {
             onClose={() => setDetail(null)}
             viewMode={viewMode}
             onViewMode={setViewMode}
+            trendId={activeId}
+            trendName={activeTrend?.name}
           />
         </div>
       </div>

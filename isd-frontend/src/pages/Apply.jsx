@@ -1,8 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Check, BadgeCheck, Search, Upload, Send } from "lucide-react";
 import TopNav from "../components/TopNav.jsx";
 import { api } from "../lib/api.js";
+import { supabase } from "../lib/supabase.js";
+
+// 다음(카카오) 우편번호 서비스 — 키 불필요. 최초 1회만 스크립트 로드.
+function loadPostcode() {
+  return new Promise((resolve, reject) => {
+    if (window.daum?.Postcode || window.kakao?.Postcode) return resolve();
+    const s = document.createElement("script");
+    s.src = "https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js";
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("주소 검색 서비스를 불러오지 못했습니다."));
+    document.head.appendChild(s);
+  });
+}
 
 function Step({ n, label, state }) {
   // state: "done" | "active" | "todo"
@@ -42,19 +55,40 @@ const inputCls = "h-12 w-full rounded-xl border border-border-soft bg-surface-pr
 
 export default function Apply() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ cafe_name: "", address: "", phone: "", business_reg_no: "" });
+  const [form, setForm] = useState({ applicant_name: "", cafe_name: "", address: "", phone: "", business_reg_no: "" });
   const [file, setFile] = useState(null);
   const [termsAgreed, setTermsAgreed] = useState(true);
   const [marketing, setMarketing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [userEmail, setUserEmail] = useState(null); // null=로딩, ""=이메일없음(카카오 등)
+
+  // 로그인한 사용자의 이메일 (Supabase 세션)
+  useEffect(() => {
+    supabase.auth.getUser()
+      .then(({ data }) => setUserEmail(data?.user?.email ?? ""))
+      .catch(() => setUserEmail(""));
+  }, []);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // 주소 검색 팝업 → 선택 시 도로명 주소를 form.address 에 채움
+  const openPostcode = async () => {
+    try {
+      await loadPostcode();
+      const Postcode = window.daum?.Postcode || window.kakao?.Postcode;
+      new Postcode({
+        oncomplete: (data) => setForm((f) => ({ ...f, address: data.roadAddress || data.address })),
+      }).open();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
   const submit = async () => {
     setError(null);
-    if (!form.cafe_name.trim() || !form.address.trim() || !form.business_reg_no.trim()) {
-      setError("필수 항목(카페 이름·주소·사업자등록번호)을 입력해주세요.");
+    if (!form.applicant_name.trim() || !form.cafe_name.trim() || !form.address.trim() || !form.business_reg_no.trim()) {
+      setError("필수 항목(신청자 이름·카페 이름·주소·사업자등록번호)을 입력해주세요.");
       return;
     }
     if (!termsAgreed) {
@@ -71,6 +105,7 @@ export default function Apply() {
       }
       // (21) 입점 신청 제출
       await api.post("/applications", {
+        applicant_name: form.applicant_name.trim(),
         cafe_name: form.cafe_name.trim(),
         address: form.address.trim(),
         phone: form.phone.trim() || null,
@@ -108,8 +143,14 @@ export default function Apply() {
 
             <div className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#EEF4FF] px-4 py-3.5">
               <BadgeCheck size={14} className="text-[#1F5DC8]" />
-              <span className="font-body text-[13px] font-semibold text-[#1F3F8A]">hyma0214@gmail.com 으로 로그인됨</span>
+              <span className="font-body text-[13px] font-semibold text-[#1F3F8A]">
+                {userEmail === null ? "로그인 정보를 불러오는 중…" : userEmail ? `${userEmail} 으로 로그인됨` : "소셜 계정으로 로그인됨"}
+              </span>
             </div>
+
+            <Field label="신청자 이름" required>
+              <input className={inputCls} placeholder="대표자(사장님) 성함" value={form.applicant_name} onChange={set("applicant_name")} />
+            </Field>
 
             <Field label="카페 이름" required>
               <input className={inputCls} placeholder="운영 중인 카페 이름" value={form.cafe_name} onChange={set("cafe_name")} />
@@ -117,11 +158,11 @@ export default function Apply() {
 
             <Field label="매장 주소" required>
               <div className="flex h-12 w-full items-center justify-between rounded-xl border border-border-soft bg-surface-primary px-4">
-                <input className="flex-1 bg-transparent font-body text-[13px] text-fg-primary outline-none placeholder:text-fg-muted" placeholder="서울특별시 마포구 ..." value={form.address} onChange={set("address")} />
-                <span className="flex h-8 items-center gap-1.5 rounded-full bg-surface-secondary px-3.5">
+                <input className="flex-1 bg-transparent font-body text-[13px] text-fg-primary outline-none placeholder:text-fg-muted" placeholder="주소 검색을 눌러 입력하세요" value={form.address} readOnly onClick={openPostcode} />
+                <button type="button" onClick={openPostcode} className="flex h-8 items-center gap-1.5 rounded-full bg-surface-secondary px-3.5">
                   <Search size={12} className="text-fg-secondary" />
                   <span className="font-body text-xs font-bold text-fg-secondary">주소 검색</span>
-                </span>
+                </button>
               </div>
             </Field>
 

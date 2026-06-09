@@ -1,4 +1,5 @@
 """Stores — API_SPEC §5"""
+import random
 from datetime import datetime, timezone
 from math import asin, cos, radians, sin, sqrt
 
@@ -6,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.core.config import settings
 from app.core.deps import CurrentUser, require_owner
+from app.core.geocode import geocode
 from app.core.responses import forbidden, not_found, ok
 from app.core.supabase import require_service_client
 from app.schemas.stores import StoreUpdateIn
@@ -69,14 +71,19 @@ async def list_stores(
         # trend_id 필터: 대표상품만이 아니라 "이 매장의 어느 상품이든" 해당 트렌드를 팔면 포함.
         # featured_product 는 매칭되는 상품(가장 오래된)으로 바꿔 그 트렌드의 재고/가격이 보이게 한다.
         if trend_id is not None:
-            matched = [p for p in store_products if p.get("trend_id") == trend_id]
-            if not matched:
+            pool = [p for p in store_products if p.get("trend_id") == trend_id]
+            if not pool:
                 continue
-            fp = matched[0]
+            fp = pool[0]
         else:
+            pool = store_products
             fp = store_products[0] if store_products else None
         if status_filter and not (fp and fp.get("stock_status") in status_filter):
             continue
+
+        # 카드 썸네일용: 해당(트렌드) 메뉴 중 사진 있는 것을 랜덤으로 하나.
+        with_image = [p["image_url"] for p in pool if p.get("image_url")]
+        sample_image_url = random.choice(with_image) if with_image else None
 
         item = {
             "store_id": s["store_id"],
@@ -84,6 +91,7 @@ async def list_stores(
             "latitude": s.get("latitude"),
             "longitude": s.get("longitude"),
             "naver_place_url": s.get("naver_place_url"),
+            "sample_image_url": sample_image_url,
             "featured_product": None,
             "trend": None,
         }
@@ -162,6 +170,11 @@ async def update_store(store_id: int, body: StoreUpdateIn, user: CurrentUser = D
     patch = body.model_dump(exclude_none=True)
     if not patch:
         return ok(db.table("stores").select("*").eq("store_id", store_id).execute().data[0])
+    # 주소가 바뀌면 좌표 재계산(직접 lat/lng 를 보낸 경우는 그 값 우선).
+    if patch.get("address") and "latitude" not in patch:
+        coords = geocode(patch["address"])
+        if coords:
+            patch["latitude"], patch["longitude"] = coords
     res = db.table("stores").update(patch).eq("store_id", store_id).execute()
     return ok(res.data[0])
 

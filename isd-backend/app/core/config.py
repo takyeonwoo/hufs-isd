@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     admin_username: str = "admin"
     admin_password: str = "admin"
 
+    # 카카오 Local API REST 키 — 주소 → 좌표(geocoding)용. 승인 시 매장 좌표 자동 생성.
+    kakao_rest_api_key: str = ""
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
