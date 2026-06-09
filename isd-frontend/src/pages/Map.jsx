@@ -40,11 +40,17 @@ function storeDesc(s) {
 }
 
 // 기존 마커 디자인 그대로 HTML 문자열로 (네이버 마커 icon.content 용)
-function markerHtml({ emoji, label, bg }) {
+// selected: 클릭된 마커(보라 링 + 확대), dimmed: 다른 마커가 선택됐을 때 흐리게
+function markerHtml({ emoji, label, bg, selected, dimmed }) {
+  const shadow = selected
+    ? "box-shadow:0 0 0 4px #7C3AED, 0 8px 18px rgba(0,0,0,0.35);"
+    : "box-shadow:0 3px 8px rgba(0,0,0,0.2);";
+  const scale = selected ? "scale(1.18)" : "scale(1)";
+  const opacity = dimmed ? "opacity:0.45;" : "opacity:1;";
   return `
     <div style="display:flex;height:36px;align-items:center;gap:6px;border-radius:9999px;
-      border:3px solid #fff;padding:0 12px;background:${bg};
-      box-shadow:0 3px 8px rgba(0,0,0,0.2);white-space:nowrap;transform:translate(-50%,-50%);cursor:pointer;">
+      border:3px solid #fff;padding:0 12px;background:${bg};${opacity}
+      ${shadow}white-space:nowrap;transform:translate(-50%,-50%) ${scale};cursor:pointer;transition:transform .12s;">
       ${emoji ? `<span style="font-size:14px;line-height:1;">${emoji}</span>` : ""}
       <span style="font-family:inherit;font-size:12px;font-weight:700;color:#fff;">${label}</span>
     </div>`;
@@ -90,7 +96,7 @@ function FilterBar({ trends, activeId, onPick }) {
   );
 }
 
-function Sidebar({ stores, activeTrend, onSelect, sort, onSort, viewMode, onViewMode }) {
+function Sidebar({ stores, activeTrend, onSelect, sort, onSort, viewMode, onViewMode, selectedId }) {
   return (
     <aside className="flex w-[440px] shrink-0 flex-col gap-[18px] overflow-y-auto bg-surface-primary p-6">
       <div className="flex flex-col gap-1.5">
@@ -139,7 +145,11 @@ function Sidebar({ stores, activeTrend, onSelect, sort, onSort, viewMode, onView
       <div className="flex flex-col gap-2.5">
         {stores.length === 0 && <span className="font-body text-xs text-fg-muted">주변에 매장이 없습니다.</span>}
         {stores.map((s) => (
-          <button key={s.store_id} onClick={() => onSelect(s.store_id)} className="text-left">
+          <button
+            key={s.store_id}
+            onClick={() => onSelect(s.store_id)}
+            className={"rounded-xl text-left transition " + (s.store_id === selectedId ? "ring-2 ring-accent" : "hover:opacity-90")}
+          >
             <StoreCard
               name={s.name}
               desc={storeDesc(s)}
@@ -235,7 +245,8 @@ function MapArea({ stores, detail, onSelect, onClose, viewMode, onViewMode }) {
     };
   }, []);
 
-  // 매장 데이터가 바뀌면 마커 다시 그리기
+  // 매장 데이터 또는 선택 상태가 바뀌면 마커 다시 그리기
+  const selectedId = detail?.store_id ?? null;
   useEffect(() => {
     const maps = window.naver?.maps;
     const map = mapRef.current;
@@ -245,10 +256,12 @@ function MapArea({ stores, detail, onSelect, onClose, viewMode, onViewMode }) {
     stores
       .filter((s) => s.latitude != null && s.longitude != null)
       .forEach((s) => {
+        const selected = s.store_id === selectedId;
         const marker = new maps.Marker({
           position: new maps.LatLng(s.latitude, s.longitude),
           map,
-          icon: { content: markerHtml(markerOf(s)) },
+          zIndex: selected ? 1000 : 1, // 선택 마커를 맨 위로
+          icon: { content: markerHtml({ ...markerOf(s), selected, dimmed: selectedId != null && !selected }) },
         });
         maps.Event.addListener(marker, "click", () => {
           logEvent("CLICK_MARKER", { store_id: s.store_id }); // (28)
@@ -256,7 +269,7 @@ function MapArea({ stores, detail, onSelect, onClose, viewMode, onViewMode }) {
         });
         markersRef.current.push(marker);
       });
-  }, [stores, onSelect]);
+  }, [stores, onSelect, selectedId]);
 
   const zoomBy = (delta) => {
     const map = mapRef.current;
@@ -384,6 +397,7 @@ export default function MapPage() {
               onSort={setSort}
               viewMode={viewMode}
               onViewMode={setViewMode}
+              selectedId={detail?.store_id ?? null}
             />
           )}
           <MapArea
