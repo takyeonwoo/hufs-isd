@@ -85,7 +85,7 @@ async def search_ranking(
     trend_ids = [tid for tid, _ in top]
     info = {}
     if trend_ids:
-        trs = db.table("trends").select("trend_id, name, emoji").in_("trend_id", trend_ids).execute().data or []
+        trs = db.table("trends").select("trend_id, name").in_("trend_id", trend_ids).execute().data or []
         info = {t["trend_id"]: t for t in trs}
 
     ranking = []
