@@ -159,5 +159,6 @@ Vite는 환경변수를 **모노레포 루트 `.env`** 에서 읽는다 (`vite.c
 ## 문서
 
 - [docs/API_SPEC.md](docs/API_SPEC.md) — REST API 명세 (35개 엔드포인트)
+- [docs/SEQUENCE_FILES.md](docs/SEQUENCE_FILES.md) — 시퀀스 다이어그램 ↔ 코드 파일/함수 매핑
 - [db/schema.sql](db/schema.sql) — DB 스키마 (9개 테이블)
 - [isd-backend/README.md](isd-backend/README.md) — 백엔드 상세
