@@ -17,3 +17,7 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# drawio 자동 백업/임시 파일
+.$*.bkp
+.$*.dtmp
