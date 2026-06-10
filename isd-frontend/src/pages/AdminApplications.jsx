@@ -21,7 +21,6 @@ function StatusPill({ s }) {
 }
 
 const PAGE_SIZE = 6;
-const emojiByName = (n = "") => (n.includes("우베") ? "🟣" : n.includes("초콜릿") ? "🍫" : n.includes("푸딩") ? "🍮" : "🏪");
 
 function fmtDate(iso) {
   if (!iso) return "";
@@ -84,7 +83,6 @@ function Table({ rows, total, page, onPage, onSelect, onApprove, onReject, selec
           style={{ backgroundColor: r.application_id === selectedId ? "#F7F4FF" : "#FFFFFF" }}
         >
           <div className="flex w-[220px] items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-secondary text-base">{emojiByName(r.cafe_name)}</span>
             <div className="flex flex-col gap-0.5">
               <span className="font-body text-[13px] font-bold text-fg-primary">{r.cafe_name}</span>
               <span className="font-body text-[11px] text-fg-muted">{r.address}</span>
@@ -169,7 +167,6 @@ function DetailPanel({ detail, onApprove, onReject }) {
       </div>
 
       <div className="flex w-full items-center gap-3 rounded-xl bg-surface-secondary p-3.5">
-        <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-surface-warm text-[22px]">{emojiByName(detail.cafe_name)}</span>
         <div className="flex flex-col gap-1">
           <span className="font-heading text-[15px] font-bold text-fg-primary">{detail.cafe_name}</span>
           <span className="font-body text-[11px] font-medium text-fg-secondary">{detail.address}</span>

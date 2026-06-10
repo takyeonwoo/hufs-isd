@@ -49,12 +49,12 @@ export default function Login() {
       <div className="flex w-full max-w-canvas">
         {/* left dark hero */}
         <div className="flex w-[720px] flex-col justify-between bg-surface-inverse p-16">
-          <div className="flex items-center gap-2.5">
+          <Link to="/" className="flex w-fit items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent">
               <Flame size={20} className="text-fg-inverse" />
             </div>
             <span className="font-heading text-2xl font-bold text-fg-inverse">Foorendy</span>
-          </div>
+          </Link>
 
           <div className="flex flex-col gap-6">
             <span className="inline-flex w-fit items-center gap-2 rounded-full bg-[#1F1F1F] px-3.5 py-1.5">
