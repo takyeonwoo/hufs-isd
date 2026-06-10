@@ -231,7 +231,13 @@ function StorePopover({ detail, onClose, trendId, trendName }) {
         </div>
       )}
       {detail.naver_place_url && (
-        <a href={detail.naver_place_url} target="_blank" rel="noreferrer" className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#03C75A]">
+        <a
+          href={detail.naver_place_url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => logEvent("VIEW_STORE", { store_id: detail.store_id })} // (28) 네이버 플레이스에서 보기 클릭 시 매장 조회 집계
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#03C75A]"
+        >
           <span className="font-heading text-sm font-bold text-fg-inverse">N</span>
           <span className="font-body text-[13px] font-bold text-fg-inverse">네이버 플레이스에서 보기</span>
         </a>
@@ -390,7 +396,8 @@ export default function MapPage() {
   }, [activeId, trendParam]);
 
   const select = useCallback((id) => {
-    logEvent("VIEW_STORE", { store_id: id }); // (28) 매장 상세 조회
+    // 상세를 여는 것만으로는 VIEW_STORE 를 찍지 않는다.
+    // VIEW_STORE 는 팝오버의 "네이버 플레이스에서 보기" 클릭 시에만 기록한다. (28)
     api.get(`/stores/${id}`).then(setDetail).catch(() => setDetail(null));
   }, []);
 
